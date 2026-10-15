@@ -1,0 +1,39 @@
+{
+  "name": "website-f-and-b-self-order-qr",
+  "version": "1.0.0",
+  "description": "Professional Real-Time F&B Self-Order System with QR Code Integration & B&W Noir Theme",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "server": "node server/index.js",
+    "client": "npm run dev --prefix client",
+    "dev": "concurrently -n \"SERVER,CLIENT\" -c \"white.bold,black.bgWhite.bold\" \"node server/index.js\" \"npm run dev --prefix client\"",
+    "build": "npm run build --prefix client",
+    "postinstall": "npm install --prefix client"
+  },
+  "keywords": [
+    "restaurant",
+    "f-and-b",
+    "self-order",
+    "qr-code",
+    "realtime",
+    "socket.io",
+    "react",
+    "monochrome"
+  ],
+  "author": "F&B Software Engineer",
+  "license": "ISC",
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "better-sqlite3": "^12.6.2",
+    "cors": "^2.8.5",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3",
+    "qrcode": "^1.5.4",
+    "socket.io": "^4.8.1"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}

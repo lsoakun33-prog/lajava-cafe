@@ -1,0 +1,83 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id        String   @id @default(uuid())
+  username  String   @unique
+  password  String
+  name      String
+  role      String   @default("admin") // admin, kitchen, cashier
+  createdAt DateTime @default(now())
+}
+
+model Category {
+  id        String     @id @default(uuid())
+  name      String     @unique
+  slug      String     @unique
+  order     Int        @default(0)
+  items     MenuItem[]
+  createdAt DateTime   @default(now())
+}
+
+model MenuItem {
+  id          String      @id @default(uuid())
+  name        String
+  description String
+  price       Float
+  image       String      // URL or base64 / placeholder
+  isAvailable Boolean     @default(true)
+  prepTime    Int         @default(15) // in minutes
+  category    Category    @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  categoryId  String
+  orderItems  OrderItem[]
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+model Table {
+  id          String   @id @default(uuid())
+  tableNumber String   @unique
+  capacity    Int      @default(4)
+  status      String   @default("AVAILABLE") // AVAILABLE, OCCUPIED, RESERVED
+  qrToken     String   @unique @default(uuid())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  orders      Order[]
+}
+
+model Order {
+  id            String      @id @default(uuid())
+  orderNumber   String      @unique // e.g. "ORD-20261015-001"
+  tableNumber   String
+  table         Table?      @relation(fields: [tableId], references: [id], onDelete: SetNull)
+  tableId       String?
+  customerName  String
+  customerNotes String?
+  status        String      @default("PENDING") // PENDING -> CONFIRMED -> PREPARING -> READY -> COMPLETED -> CANCELLED
+  paymentMethod String      @default("CASHIER") // CASHIER, QRIS
+  paymentStatus String      @default("UNPAID")  // UNPAID, PAID
+  subtotal      Float
+  tax           Float       @default(0)
+  totalAmount   Float
+  items         OrderItem[]
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+}
+
+model OrderItem {
+  id         String   @id @default(uuid())
+  order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId    String
+  menuItem   MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Restrict)
+  menuItemId String
+  name       String
+  price      Float
+  quantity   Int
+  notes      String?
+}
