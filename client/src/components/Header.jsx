@@ -16,19 +16,19 @@ export default function Header({
         {/* Brand / Logo */}
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl bg-white text-black flex items-center justify-center font-black tracking-tighter text-sm shadow-md">
-            N
+            LJ
           </div>
           <div>
             <div className="flex items-center gap-1.5">
               <span className="font-extrabold text-sm sm:text-base tracking-widest uppercase text-white">
-                NOIR F&B
+                LA JAVA
               </span>
               <span className="text-[9px] font-semibold tracking-wider uppercase px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300">
-                Self-Order
+                Cafe & Resto
               </span>
             </div>
             <p className="text-[10px] text-zinc-400 hidden sm:block">
-              Artisan Coffee & Gourmet Kitchen
+              Self-Order & Artisan Kitchen
             </p>
           </div>
         </div>

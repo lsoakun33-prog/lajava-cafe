@@ -35,7 +35,7 @@ app.get('/api/health', (req, res) => {
   res.json({
     status: 'online',
     timestamp: new Date().toISOString(),
-    service: 'Noir F&B Real-Time Self Order Engine',
+    service: 'La Java Cafe & Resto — Real-Time Self Order Engine',
   });
 });
 
@@ -52,7 +52,7 @@ if (fs.existsSync(clientDist)) {
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, '0.0.0.0', () => {
   console.log('========================================================');
-  console.log(`🚀 NOIR F&B SERVER RUNNING AT: http://localhost:${PORT}`);
+  console.log(`🚀 LA JAVA CAFE & RESTO SERVER RUNNING AT: http://localhost:${PORT}`);
   console.log(`📡 Socket.IO Real-Time Engine Active`);
   console.log(`🔐 Admin credentials: username="admin" | password="admin123"`);
   console.log('========================================================');

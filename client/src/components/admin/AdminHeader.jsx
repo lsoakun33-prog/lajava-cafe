@@ -28,12 +28,12 @@ export default function AdminHeader({
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-white text-black flex items-center justify-center font-black text-sm shadow-md">
-              KDS
+              LJ
             </div>
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="font-extrabold text-sm sm:text-base tracking-wider uppercase text-white">
-                  NOIR KITCHEN & ADMIN
+                  LA JAVA KITCHEN & ADMIN
                 </h1>
                 <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-zinc-900 border border-zinc-800 text-[10px] text-zinc-300">
                   <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>

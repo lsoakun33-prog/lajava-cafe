@@ -30,10 +30,10 @@ export default function ReceiptModal({ order, onClose }) {
         <div className="p-6 overflow-y-auto font-mono text-xs text-zinc-300 print:text-black print:bg-white print:p-0">
           {/* Header */}
           <div className="text-center pb-4 border-b border-dashed border-zinc-700">
-            <h1 className="text-base font-bold tracking-widest uppercase text-white print:text-black">NOIR F&B CO.</h1>
-            <p className="text-[10px] text-zinc-500 print:text-zinc-700">ARTISAN COFFEE & GOURMET BITES</p>
-            <p className="text-[10px] text-zinc-500 print:text-zinc-700">Jl. Senopati No. 88, Jakarta Selatan</p>
-            <p className="text-[10px] text-zinc-500 print:text-zinc-700">Tel: (021) 7890-1234</p>
+            <h1 className="text-base font-bold tracking-widest uppercase text-white print:text-black">LA JAVA CAFE & RESTO</h1>
+            <p className="text-[10px] text-zinc-500 print:text-zinc-700">ARTISAN COFFEE & INDONESIAN GOURMET</p>
+            <p className="text-[10px] text-zinc-500 print:text-zinc-700">Jl. Malioboro No. 45, Yogyakarta</p>
+            <p className="text-[10px] text-zinc-500 print:text-zinc-700">Tel: (0274) 555-890</p>
           </div>
 
           {/* Meta Info */}

@@ -17,8 +17,8 @@ export default function AdminView({ onSwitchToCustomer }) {
   const [token, setToken] = useState(() => localStorage.getItem('noir_admin_token'));
 
   // Login form state
-  const [usernameInput, setUsernameInput] = useState('admin');
-  const [passwordInput, setPasswordInput] = useState('admin123');
+  const [usernameInput, setUsernameInput] = useState('');
+  const [passwordInput, setPasswordInput] = useState('');
   const [loginError, setLoginError] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
@@ -238,13 +238,13 @@ export default function AdminView({ onSwitchToCustomer }) {
           {/* Top Logo */}
           <div className="text-center space-y-2">
             <div className="w-12 h-12 rounded-2xl bg-white text-black flex items-center justify-center font-black text-lg mx-auto shadow-lg">
-              KDS
+              LJ
             </div>
             <h1 className="text-xl font-black tracking-widest uppercase text-white">
-              NOIR ADMIN & KITCHEN
+              LA JAVA CAFE & RESTO
             </h1>
             <p className="text-xs text-zinc-400">
-              Masuk untuk mengelola pesanan, stok F&B, dan QR code meja
+              Masuk ke Dashboard Manajemen Pesanan & Dapur (KDS)
             </p>
           </div>
 
@@ -265,7 +265,7 @@ export default function AdminView({ onSwitchToCustomer }) {
                   type="text"
                   value={usernameInput}
                   onChange={(e) => setUsernameInput(e.target.value)}
-                  placeholder="admin"
+                  placeholder="Masukkan username"
                   required
                   className="w-full pl-10 pr-4 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-white transition-colors"
                 />
@@ -285,12 +285,6 @@ export default function AdminView({ onSwitchToCustomer }) {
                   className="w-full pl-10 pr-4 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-white transition-colors"
                 />
               </div>
-            </div>
-
-            {/* Quick Demo Credentials Info */}
-            <div className="p-3 bg-zinc-900/60 border border-zinc-800/80 rounded-xl text-[11px] text-zinc-400 flex items-center justify-between">
-              <span>Demo Login:</span>
-              <span className="font-mono text-zinc-200">admin / admin123</span>
             </div>
 
             <button

@@ -59,7 +59,7 @@ export default function TablesTab({
             {/* Card Content Top */}
             <div className="space-y-1">
               <span className="text-[10px] font-bold tracking-widest uppercase text-zinc-400 print:text-zinc-700">
-                NOIR F&B • SELF ORDER
+                LA JAVA CAFE & RESTO • SELF ORDER
               </span>
               <h3 className="text-xl font-black tracking-wider text-white print:text-black">
                 {table.table_number}

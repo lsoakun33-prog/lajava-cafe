@@ -11,7 +11,7 @@ const STATUS_STEPS = [
   { key: 'COMPLETED', label: 'Selesai', desc: 'Pesanan telah selesai dinikmati', icon: CheckCircle2 },
 ];
 
-export default function OrderStatusModal({ order: initialOrder, onClose, onViewReceipt }) {
+export default function OrderStatusModal({ order: initialOrder, isOpen, onClose, onViewReceipt }) {
   const [order, setOrder] = useState(initialOrder);
 
   useEffect(() => {
@@ -50,7 +50,7 @@ export default function OrderStatusModal({ order: initialOrder, onClose, onViewR
     };
   }, [initialOrder]);
 
-  if (!order) return null;
+  if (!isOpen || !order) return null;
 
   const currentStepIndex = () => {
     if (order.status === 'CANCELLED') return -1;
@@ -64,8 +64,14 @@ export default function OrderStatusModal({ order: initialOrder, onClose, onViewR
   const activeIndex = currentStepIndex();
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in">
-      <div className="relative w-full max-w-lg bg-zinc-950 border border-zinc-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+    <div
+      onClick={onClose}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="relative w-full max-w-lg bg-zinc-950 border border-zinc-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+      >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-5 border-b border-zinc-800 bg-zinc-900/60">
           <div>
