@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { ArrowRight, ShoppingBag, Sparkles, AlertCircle } from 'lucide-react';
 import Header from '../components/Header';
 import CategoryFilter from '../components/CategoryFilter';
@@ -73,9 +73,27 @@ export default function CustomerView({ onSwitchToAdmin }) {
     joinTableRoom(tableNumber);
   }, [tableNumber]);
 
+  // ─── Callback: sync updated order back to state + localStorage ─────────────
+  const handleOrderUpdated = useCallback((updatedOrder) => {
+    setActiveOrder(updatedOrder);
+    localStorage.setItem('noir_active_order', JSON.stringify(updatedOrder));
+    // If order is done/cancelled, we keep the record so customer can see receipt
+  }, []);
+
   // Fetch initial data
   useEffect(() => {
     loadData();
+
+    // Re-join order room if there's an existing active order (e.g. after page refresh)
+    const savedOrder = (() => {
+      try {
+        const saved = localStorage.getItem('noir_active_order');
+        return saved ? JSON.parse(saved) : null;
+      } catch { return null; }
+    })();
+    if (savedOrder?.id) {
+      joinOrderRoom(savedOrder.id);
+    }
 
     // Listen to real-time menu events
     const handleAvailability = ({ id, is_available }) => {
@@ -98,16 +116,30 @@ export default function CustomerView({ onSwitchToAdmin }) {
       setMenuItems((prev) => prev.filter((i) => i.id !== id));
     };
 
+    // Listen to order status updates even when modal is closed (keeps header badge in sync)
+    const handleOrderStatusUpdate = (updatedOrder) => {
+      setActiveOrder((prev) => {
+        if (prev && updatedOrder.id === prev.id) {
+          localStorage.setItem('noir_active_order', JSON.stringify(updatedOrder));
+          return updatedOrder;
+        }
+        return prev;
+      });
+    };
+
     socket.on('menu:availability_changed', handleAvailability);
     socket.on('menu:updated', handleMenuUpdate);
     socket.on('menu:deleted', handleMenuDelete);
+    socket.on('order:status_updated', handleOrderStatusUpdate);
 
     return () => {
       socket.off('menu:availability_changed', handleAvailability);
       socket.off('menu:updated', handleMenuUpdate);
       socket.off('menu:deleted', handleMenuDelete);
+      socket.off('order:status_updated', handleOrderStatusUpdate);
     };
   }, []);
+
 
   const loadData = async () => {
     setIsLoading(true);
@@ -363,6 +395,7 @@ export default function CustomerView({ onSwitchToAdmin }) {
         onViewReceipt={(order) => {
           setReceiptOrder(order);
         }}
+        onOrderUpdated={handleOrderUpdated}
       />
 
       <QRScannerModal
