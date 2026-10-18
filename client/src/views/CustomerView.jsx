@@ -247,8 +247,8 @@ export default function CustomerView({ onSwitchToAdmin }) {
         <div className="mb-6 p-6 rounded-3xl bg-zinc-950 border border-zinc-800/80 relative overflow-hidden flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="space-y-1 relative z-10">
             <div className="flex items-center gap-2">
-              <span className="text-[10px] font-bold tracking-widest uppercase px-2 py-0.5 rounded-full bg-white text-black">
-                Self Order Kiosk
+              <span className="text-[10px] font-bold tracking-widest uppercase px-2.5 py-0.5 rounded-full bg-white text-black">
+                Pesan dari Meja
               </span>
               <span className="text-xs text-zinc-400">Anda duduk di:</span>
               <span className="text-xs font-bold text-white px-2 py-0.5 rounded-md bg-zinc-900 border border-zinc-800">

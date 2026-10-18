@@ -27,8 +27,12 @@ export default function AdminHeader({
         {/* Left: Brand & Socket status */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-white text-black flex items-center justify-center font-black text-sm shadow-md">
-              LJ
+            <div className="w-9 h-9 rounded-full overflow-hidden border border-zinc-700 bg-black shadow-md shrink-0">
+              <img
+                src="/logo-lajava.jpg"
+                alt="La Java"
+                className="w-full h-full object-cover"
+              />
             </div>
             <div>
               <div className="flex items-center gap-2">

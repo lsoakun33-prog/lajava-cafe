@@ -15,8 +15,12 @@ export default function Header({
       <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
         {/* Brand / Logo */}
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-white text-black flex items-center justify-center font-black tracking-tighter text-sm shadow-md">
-            LJ
+          <div className="w-10 h-10 rounded-full overflow-hidden border border-zinc-700 bg-black shadow-md shrink-0">
+            <img
+              src="/logo-lajava.jpg"
+              alt="La Java Cafe & Resto"
+              className="w-full h-full object-cover"
+            />
           </div>
           <div>
             <div className="flex items-center gap-1.5">

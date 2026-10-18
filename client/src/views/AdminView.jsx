@@ -237,8 +237,12 @@ export default function AdminView({ onSwitchToCustomer }) {
         <div className="w-full max-w-md bg-zinc-950 border border-zinc-800 rounded-3xl p-8 space-y-6 shadow-2xl relative overflow-hidden">
           {/* Top Logo */}
           <div className="text-center space-y-2">
-            <div className="w-12 h-12 rounded-2xl bg-white text-black flex items-center justify-center font-black text-lg mx-auto shadow-lg">
-              LJ
+            <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-zinc-700 bg-black mx-auto shadow-xl">
+              <img
+                src="/logo-lajava.jpg"
+                alt="La Java Cafe & Resto"
+                className="w-full h-full object-cover"
+              />
             </div>
             <h1 className="text-xl font-black tracking-widest uppercase text-white">
               LA JAVA CAFE & RESTO
