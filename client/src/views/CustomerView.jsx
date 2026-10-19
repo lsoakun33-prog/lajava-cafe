@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ArrowRight, ShoppingBag, Sparkles, AlertCircle } from 'lucide-react';
 import Header from '../components/Header';
 import CategoryFilter from '../components/CategoryFilter';
@@ -62,6 +62,11 @@ export default function CustomerView({ onSwitchToAdmin }) {
   const [receiptOrder, setReceiptOrder] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // 5-minute auto-close deadline (timestamp ms) — set when admin marks COMPLETED
+  // null = no auto-close scheduled
+  const [autoCloseDeadline, setAutoCloseDeadline] = useState(null);
+  const autoCloseTimerRef = useRef(null); // stores the setTimeout ID
+
   // Persist cart
   useEffect(() => {
     localStorage.setItem('noir_cart', JSON.stringify(cart));
@@ -77,7 +82,37 @@ export default function CustomerView({ onSwitchToAdmin }) {
   const handleOrderUpdated = useCallback((updatedOrder) => {
     setActiveOrder(updatedOrder);
     localStorage.setItem('noir_active_order', JSON.stringify(updatedOrder));
-    // If order is done/cancelled, we keep the record so customer can see receipt
+  }, []);
+
+  // ─── Customer clicks "Selesai ✓" → clear IMMEDIATELY ────────────────────────
+  const handleCustomerConfirmDone = useCallback(() => {
+    // Cancel the 5-min auto-close timer if it was running
+    if (autoCloseTimerRef.current) {
+      clearTimeout(autoCloseTimerRef.current);
+      autoCloseTimerRef.current = null;
+    }
+    setAutoCloseDeadline(null);
+    // Wipe active order from state and localStorage right away
+    setActiveOrder(null);
+    localStorage.removeItem('noir_active_order');
+    setIsOrderStatusOpen(false);
+  }, []);
+
+  // ─── Helper: start/reset the 5-min admin auto-close timer ───────────────────
+  const startAdminAutoCloseTimer = useCallback(() => {
+    // Clear any previously running timer
+    if (autoCloseTimerRef.current) clearTimeout(autoCloseTimerRef.current);
+
+    const deadline = Date.now() + 5 * 60 * 1000; // 5 minutes from now
+    setAutoCloseDeadline(deadline);
+
+    autoCloseTimerRef.current = setTimeout(() => {
+      autoCloseTimerRef.current = null;
+      setAutoCloseDeadline(null);
+      setActiveOrder(null);
+      localStorage.removeItem('noir_active_order');
+      setIsOrderStatusOpen(false);
+    }, 5 * 60 * 1000);
   }, []);
 
   // Fetch initial data
@@ -116,11 +151,18 @@ export default function CustomerView({ onSwitchToAdmin }) {
       setMenuItems((prev) => prev.filter((i) => i.id !== id));
     };
 
-    // Listen to order status updates even when modal is closed (keeps header badge in sync)
+    // Listen to order status updates even when modal is closed
+    // When admin marks COMPLETED → start 5-min countdown before auto-clearing
     const handleOrderStatusUpdate = (updatedOrder) => {
       setActiveOrder((prev) => {
         if (prev && updatedOrder.id === prev.id) {
           localStorage.setItem('noir_active_order', JSON.stringify(updatedOrder));
+
+          if (updatedOrder.status === 'COMPLETED') {
+            // Trigger the 5-min auto-close timer (via ref, safe inside state updater)
+            startAdminAutoCloseTimer();
+          }
+
           return updatedOrder;
         }
         return prev;
@@ -137,8 +179,11 @@ export default function CustomerView({ onSwitchToAdmin }) {
       socket.off('menu:updated', handleMenuUpdate);
       socket.off('menu:deleted', handleMenuDelete);
       socket.off('order:status_updated', handleOrderStatusUpdate);
+      // Clean up timer on unmount
+      if (autoCloseTimerRef.current) clearTimeout(autoCloseTimerRef.current);
     };
-  }, []);
+  }, [startAdminAutoCloseTimer]);
+
 
 
   const loadData = async () => {
@@ -396,6 +441,8 @@ export default function CustomerView({ onSwitchToAdmin }) {
           setReceiptOrder(order);
         }}
         onOrderUpdated={handleOrderUpdated}
+        onCustomerConfirm={handleCustomerConfirmDone}
+        autoCloseDeadline={autoCloseDeadline}
       />
 
       <QRScannerModal

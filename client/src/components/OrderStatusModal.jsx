@@ -31,10 +31,11 @@ function getStepIndex(status) {
   return 0;
 }
 
-export default function OrderStatusModal({ order: initialOrder, isOpen, onClose, onViewReceipt, onOrderUpdated }) {
+export default function OrderStatusModal({ order: initialOrder, isOpen, onClose, onViewReceipt, onOrderUpdated, onCustomerConfirm, autoCloseDeadline }) {
   const [order, setOrder] = useState(initialOrder);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [hasShownCompletedConfetti, setHasShownCompletedConfetti] = useState(false);
+  const [countdown, setCountdown] = useState(''); // "4:32" countdown text
 
   // ─── Fetch latest status from API ──────────────────────────────────────────
   const fetchLatestOrder = useCallback(async (orderId) => {
@@ -134,6 +135,25 @@ export default function OrderStatusModal({ order: initialOrder, isOpen, onClose,
     }, 350);
   }
 
+  // ─── Live countdown from autoCloseDeadline ──────────────────────────────────
+  // Ticks every second while admin's 5-min grace period is running
+  useEffect(() => {
+    if (!autoCloseDeadline) {
+      setCountdown('');
+      return;
+    }
+    const tick = () => {
+      const remaining = Math.max(0, autoCloseDeadline - Date.now());
+      if (remaining === 0) { setCountdown(''); return; }
+      const m = Math.floor(remaining / 60000);
+      const s = Math.floor((remaining % 60000) / 1000);
+      setCountdown(`${m}:${s.toString().padStart(2, '0')}`);
+    };
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, [autoCloseDeadline]);
+
   if (!isOpen || !order) return null;
 
   const isCancelled = order.status === 'CANCELLED';
@@ -228,12 +248,19 @@ export default function OrderStatusModal({ order: initialOrder, isOpen, onClose,
               </div>
 
               {/* Completed call-to-action banner */}
-              <div className="p-5 rounded-2xl bg-white text-black text-center space-y-1 shadow-xl">
+              <div className="p-5 rounded-2xl bg-white text-black text-center shadow-xl space-y-1">
                 <CheckCircle2 className="w-7 h-7 mx-auto mb-1" />
                 <p className="text-sm font-black tracking-wide">Pesanan Selesai!</p>
                 <p className="text-xs font-medium text-zinc-700">
-                  Terima kasih telah makan di La Java Cafe & Resto 🙌
+                  Terima kasih telah makan di La Java Cafe &amp; Resto 🙌
                 </p>
+                {/* Countdown: only shown when admin triggered completion (5-min grace) */}
+                {countdown && (
+                  <p className="text-[11px] text-zinc-500 pt-1 border-t border-zinc-200 mt-2">
+                    Info pesanan tertutup otomatis dalam{' '}
+                    <span className="font-black text-black tabular-nums">{countdown}</span>
+                  </p>
+                )}
               </div>
             </div>
 
@@ -343,12 +370,22 @@ export default function OrderStatusModal({ order: initialOrder, isOpen, onClose,
             <Receipt className="w-4 h-4" />
             Lihat Struk
           </button>
-          <button
-            onClick={onClose}
-            className="flex-1 py-3 px-4 rounded-xl bg-white text-black font-semibold text-xs tracking-wider uppercase hover:bg-zinc-200 transition-colors"
-          >
-            {isCompleted ? 'Selesai ✓' : 'Tutup'}
-          </button>
+          {isCompleted ? (
+            /* Customer confirms done → immediate clear of active order */
+            <button
+              onClick={onCustomerConfirm || onClose}
+              className="flex-1 py-3 px-4 rounded-xl bg-white text-black font-semibold text-xs tracking-wider uppercase hover:bg-zinc-200 transition-colors"
+            >
+              Selesai ✓
+            </button>
+          ) : (
+            <button
+              onClick={onClose}
+              className="flex-1 py-3 px-4 rounded-xl bg-white text-black font-semibold text-xs tracking-wider uppercase hover:bg-zinc-200 transition-colors"
+            >
+              Tutup
+            </button>
+          )}
         </div>
       </div>
     </div>
