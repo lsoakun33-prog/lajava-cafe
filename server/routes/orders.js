@@ -5,6 +5,31 @@ const db = require('../db');
 const { authenticateAdmin } = require('./auth');
 const { getIO } = require('../socket');
 
+/**
+ * SQLite CURRENT_TIMESTAMP returns "YYYY-MM-DD HH:MM:SS" in UTC
+ * without any timezone indicator. When the browser calls new Date() on
+ * this string it treats it as LOCAL time on some engines (Chrome) —
+ * causing a +7h offset error in Indonesia (WIB / UTC+7).
+ *
+ * Fix: append " UTC" so the spec forces UTC interpretation, then the
+ * browser's Intl / Date engine converts it correctly to local time.
+ */
+function normalizeTimestamp(ts) {
+  if (!ts) return ts;
+  // Already has timezone info (ISO 8601 with Z or +HH:MM) → leave it
+  if (ts.includes('Z') || ts.includes('+') || ts.includes('T')) return ts;
+  return ts + ' UTC';
+}
+
+function normalizeOrder(order) {
+  if (!order) return order;
+  return {
+    ...order,
+    created_at: normalizeTimestamp(order.created_at),
+    updated_at: normalizeTimestamp(order.updated_at),
+  };
+}
+
 // Helper to format order number: e.g. "ORD-20261016-004"
 function generateOrderNumber() {
   const now = new Date();
@@ -99,8 +124,9 @@ router.post('/', (req, res) => {
     insertTransaction();
 
     // Fetch the created full order object
-    const createdOrder = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId);
-    createdOrder.items = validatedItems;
+    const rawOrder = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId);
+    rawOrder.items = validatedItems;
+    const createdOrder = normalizeOrder(rawOrder);
 
     // Real-time broadcast to Admin Kitchen & Cashier!
     try {
@@ -140,10 +166,9 @@ router.get('/', authenticateAdmin, (req, res) => {
     const orders = db.prepare(query).all(...params);
 
     const getItemsStmt = db.prepare('SELECT * FROM order_items WHERE order_id = ?');
-    const fullOrders = orders.map((ord) => ({
-      ...ord,
-      items: getItemsStmt.all(ord.id),
-    }));
+    const fullOrders = orders.map((ord) =>
+      normalizeOrder({ ...ord, items: getItemsStmt.all(ord.id) })
+    );
 
     return res.json({ success: true, data: fullOrders });
   } catch (err) {
@@ -164,7 +189,7 @@ router.get('/:id', (req, res) => {
     const items = db.prepare('SELECT * FROM order_items WHERE order_id = ?').all(order.id);
     order.items = items;
 
-    return res.json({ success: true, data: order });
+    return res.json({ success: true, data: normalizeOrder(order) });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
   }
@@ -188,8 +213,10 @@ router.patch('/:id/status', authenticateAdmin, (req, res) => {
 
     db.prepare('UPDATE orders SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(status, id);
 
-    const updatedOrder = db.prepare('SELECT * FROM orders WHERE id = ?').get(id);
-    updatedOrder.items = db.prepare('SELECT * FROM order_items WHERE order_id = ?').all(id);
+    const updatedOrder = normalizeOrder({
+      ...db.prepare('SELECT * FROM orders WHERE id = ?').get(id),
+      items: db.prepare('SELECT * FROM order_items WHERE order_id = ?').all(id),
+    });
 
     // Real-time broadcast to user's order screen & admin room
     try {
@@ -227,8 +254,10 @@ router.patch('/:id/payment', (req, res) => {
       id
     );
 
-    const updated = db.prepare('SELECT * FROM orders WHERE id = ?').get(id);
-    updated.items = db.prepare('SELECT * FROM order_items WHERE order_id = ?').all(id);
+    const updated = normalizeOrder({
+      ...db.prepare('SELECT * FROM orders WHERE id = ?').get(id),
+      items: db.prepare('SELECT * FROM order_items WHERE order_id = ?').all(id),
+    });
 
     try {
       const io = getIO();
