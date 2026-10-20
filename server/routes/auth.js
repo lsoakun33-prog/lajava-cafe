@@ -2,9 +2,22 @@ const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const rateLimit = require('express-rate-limit');
 const db = require('../db');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'fb_secret_key_pro_2026_noir_minimalist';
+
+// Rate Limiter for Login: protect from brute force attacks
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 menit
+  max: 15, // max 15 percobaan login per IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    message: 'Terlalu banyak percobaan login. Akun dikunci sementara demi keamanan, silakan coba 15 menit lagi.',
+  },
+});
 
 // Middleware for Admin Auth
 function authenticateAdmin(req, res, next) {
@@ -24,7 +37,7 @@ function authenticateAdmin(req, res, next) {
 }
 
 // POST /api/auth/login
-router.post('/login', (req, res) => {
+router.post('/login', loginLimiter, (req, res) => {
   const { username, password } = req.body;
 
   if (!username || !password) {

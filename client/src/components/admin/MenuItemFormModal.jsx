@@ -25,6 +25,7 @@ export default function MenuItemFormModal({
     category_id: categories[0]?.id || '',
     price: '',
     prep_time: 15,
+    stock: '',
     description: '',
     image: '',
   });
@@ -37,6 +38,7 @@ export default function MenuItemFormModal({
         category_id: editingItem.category_id,
         price: editingItem.price,
         prep_time: editingItem.prep_time || 15,
+        stock: editingItem.stock !== null && editingItem.stock !== undefined ? editingItem.stock : '',
         description: editingItem.description || '',
         image: editingItem.image || '',
       });
@@ -46,6 +48,7 @@ export default function MenuItemFormModal({
         category_id: categories[0]?.id || '',
         price: '',
         prep_time: 15,
+        stock: '',
         description: '',
         image: PRESET_IMAGES[0].url,
       });
@@ -66,6 +69,7 @@ export default function MenuItemFormModal({
       ...formData,
       price: Number(formData.price),
       prep_time: Number(formData.prep_time) || 15,
+      stock: formData.stock === '' || formData.stock === null ? null : Number(formData.stock),
       image: formData.image || PRESET_IMAGES[0].url,
     });
   };
@@ -156,6 +160,24 @@ export default function MenuItemFormModal({
                 className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-white transition-colors"
               />
             </div>
+          </div>
+
+          {/* Stock tracking */}
+          <div>
+            <label className="text-xs font-semibold text-zinc-300 block mb-1">
+              Batas Stok Harian (Porsi)
+            </label>
+            <input
+              type="number"
+              value={formData.stock}
+              onChange={(e) => setFormData({ ...formData, stock: e.target.value })}
+              placeholder="Kosongkan jika tak terbatas (unlimited)"
+              min="0"
+              className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-white transition-colors"
+            />
+            <p className="text-[10px] text-zinc-500 mt-1">
+              *Jika diisi angka, stok otomatis berkurang setiap ada pesanan masuk. Saat 0, menu otomatis sold out.
+            </p>
           </div>
 
           {/* Description */}

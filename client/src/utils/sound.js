@@ -50,3 +50,58 @@ export function playNotificationSound() {
     console.warn('[Sound] AudioContext error:', err);
   }
 }
+
+// Sound for customer when order is READY to serve
+export function playOrderReadySound() {
+  try {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return;
+    const ctx = new AudioContext();
+    if (ctx.state === 'suspended') ctx.resume();
+
+    const now = ctx.currentTime;
+    // Cheerful ascending 2-tone bell
+    const notes = [880, 1174.66, 1479.98]; // A5 -> D6 -> F#6
+    notes.forEach((freq, idx) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(freq, now + idx * 0.15);
+      gain.gain.setValueAtTime(0.3, now + idx * 0.15);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.15 + 0.7);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now + idx * 0.15);
+      osc.stop(now + idx * 0.15 + 0.7);
+    });
+  } catch (err) {
+    console.warn('[Sound] Error playing ready sound:', err);
+  }
+}
+
+// Sound for admin when customer calls waiter (Service Desk bell)
+export function playWaiterBellSound() {
+  try {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return;
+    const ctx = new AudioContext();
+    if (ctx.state === 'suspended') ctx.resume();
+
+    const now = ctx.currentTime;
+    // Rapid double bell chime
+    [0, 0.12].forEach((offset) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(2093, now + offset); // C7 high ding
+      gain.gain.setValueAtTime(0.4, now + offset);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.5);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now + offset);
+      osc.stop(now + offset + 0.5);
+    });
+  } catch (err) {
+    console.warn('[Sound] Error playing waiter bell:', err);
+  }
+}

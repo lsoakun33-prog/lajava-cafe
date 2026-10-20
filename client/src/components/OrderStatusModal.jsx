@@ -15,6 +15,7 @@ import confetti from 'canvas-confetti';
 import { socket, joinOrderRoom } from '../socket';
 import { api } from '../api';
 import { formatRupiah } from '../utils/format';
+import { playOrderReadySound } from '../utils/sound';
 
 const STATUS_STEPS = [
   { key: 'PENDING',   label: 'Diterima',       desc: 'Pesanan sudah diterima dapur, sedang dikonfirmasi...', icon: Clock },
@@ -95,9 +96,12 @@ export default function OrderStatusModal({ order: initialOrder, isOpen, onClose,
     };
   }, [isOpen, initialOrder?.id]);
 
-  // ─── Fire confetti when order reaches READY/COMPLETED ──────────────────────
+  // ─── Fire confetti & sound when order reaches READY/COMPLETED ─────────────
   useEffect(() => {
     if (!order) return;
+    if (order.status === 'READY') {
+      playOrderReadySound();
+    }
     if (
       (order.status === 'READY' || order.status === 'COMPLETED') &&
       !hasShownCompletedConfetti
@@ -223,7 +227,15 @@ export default function OrderStatusModal({ order: initialOrder, isOpen, onClose,
             <div className="p-5 rounded-2xl bg-zinc-900 border border-zinc-800 text-center space-y-2">
               <AlertCircle className="w-10 h-10 text-zinc-500 mx-auto" />
               <h3 className="text-sm font-bold text-white">Pesanan Dibatalkan</h3>
-              <p className="text-xs text-zinc-400">Pesanan ini telah dibatalkan. Silakan hubungi pelayan untuk informasi lebih lanjut.</p>
+              {order.cancel_reason ? (
+                <div className="p-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-zinc-300">
+                  <span className="text-zinc-500 block text-[10px] uppercase font-semibold">Alasan Pembatalan:</span>
+                  <span className="font-medium text-white">{order.cancel_reason}</span>
+                </div>
+              ) : (
+                <p className="text-xs text-zinc-400">Pesanan ini telah dibatalkan oleh kasir/dapur.</p>
+              )}
+              <p className="text-[11px] text-zinc-500">Silakan hubungi pelayan atau pilih hidangan alternatif.</p>
             </div>
 
           /* ── COMPLETED State (full celebratory) ─────────────────────── */

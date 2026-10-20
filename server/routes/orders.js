@@ -1,9 +1,22 @@
 const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
+const rateLimit = require('express-rate-limit');
 const db = require('../db');
 const { authenticateAdmin } = require('./auth');
 const { getIO } = require('../socket');
+
+// Rate limiter: max 12 order placements per minute per IP
+const orderLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 12,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    message: 'Terlalu banyak permintaan pesanan dari perangkat ini. Mohon tunggu 1 menit sebelum memesan kembali.',
+  },
+});
 
 /**
  * SQLite CURRENT_TIMESTAMP returns "YYYY-MM-DD HH:MM:SS" in UTC
@@ -38,23 +51,33 @@ function generateOrderNumber() {
   return `ORD-${dateStr}-${rand}`;
 }
 
-// POST /api/orders - Customer places an order
-router.post('/', (req, res) => {
+// POST /api/orders - Customer places an order (Rate limited & stock verified)
+router.post('/', orderLimiter, (req, res) => {
   try {
-    const { tableNumber, customerName, customerNotes, paymentMethod, items } = req.body;
+    const { tableNumber, customerName, customerNotes, paymentMethod, items, tableToken } = req.body;
 
     if (!tableNumber || !customerName || !items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ success: false, message: 'Data meja, nama pemesan, dan menu wajib diisi' });
     }
 
+    // Verify table existence & token anti-spoofing
+    const tableRow = db.prepare('SELECT * FROM tables WHERE table_number = ?').get(tableNumber);
+    if (!tableRow) {
+      return res.status(400).json({ success: false, message: `Meja "${tableNumber}" tidak terdaftar di sistem kafe` });
+    }
+    if (tableToken && tableRow.qr_token && tableToken !== tableRow.qr_token) {
+      return res.status(403).json({ success: false, message: 'QR Token meja tidak valid. Silakan scan ulang barcode di meja Anda.' });
+    }
+
     const orderId = `ord_${crypto.randomUUID()}`;
     const orderNumber = generateOrderNumber();
 
-    // Calculate subtotal from items in database to avoid client tampering
+    // Calculate subtotal from items in database & verify availability and stock
     let subtotal = 0;
     const validatedItems = [];
+    const stockUpdates = []; // items to decrement
 
-    const getItemStmt = db.prepare('SELECT id, name, price, is_available FROM menu_items WHERE id = ?');
+    const getItemStmt = db.prepare('SELECT id, name, price, is_available, stock FROM menu_items WHERE id = ?');
 
     for (const item of items) {
       const dbItem = getItemStmt.get(item.id);
@@ -66,6 +89,18 @@ router.post('/', (req, res) => {
       }
 
       const qty = Math.max(1, Number(item.quantity) || 1);
+
+      // Check stock limit if tracked
+      if (dbItem.stock !== null && dbItem.stock !== undefined) {
+        if (dbItem.stock < qty) {
+          return res.status(400).json({
+            success: false,
+            message: `Stok menu "${dbItem.name}" tidak mencukupi (Tersisa: ${dbItem.stock} porsi)`,
+          });
+        }
+        stockUpdates.push({ id: dbItem.id, newStock: Math.max(0, dbItem.stock - qty) });
+      }
+
       const itemSubtotal = dbItem.price * qty;
       subtotal += itemSubtotal;
 
@@ -82,13 +117,14 @@ router.post('/', (req, res) => {
     const tax = Math.round(subtotal * 0.1); // 10% PB1 tax
     const totalAmount = subtotal + tax;
 
-    // Use transaction for atomic write
+    // Use transaction for atomic write (order + items + stock deduction)
+    const outOfStockItems = [];
     const insertTransaction = db.transaction(() => {
       const insertOrderStmt = db.prepare(`
         INSERT INTO orders (
           id, order_number, table_number, customer_name, customer_notes, 
-          status, payment_method, payment_status, subtotal, tax, total_amount
-        ) VALUES (?, ?, ?, ?, ?, 'PENDING', ?, 'UNPAID', ?, ?, ?)
+          status, payment_method, payment_status, subtotal, tax, total_amount, table_token
+        ) VALUES (?, ?, ?, ?, ?, 'PENDING', ?, 'UNPAID', ?, ?, ?, ?)
       `);
 
       insertOrderStmt.run(
@@ -100,7 +136,8 @@ router.post('/', (req, res) => {
         paymentMethod || 'CASHIER',
         subtotal,
         tax,
-        totalAmount
+        totalAmount,
+        tableToken || null
       );
 
       const insertOrderItemStmt = db.prepare(`
@@ -119,9 +156,27 @@ router.post('/', (req, res) => {
           vItem.notes
         );
       }
+
+      // Deduct stock and toggle availability if reached 0
+      const updateStockStmt = db.prepare('UPDATE menu_items SET stock = ?, is_available = ? WHERE id = ?');
+      for (const su of stockUpdates) {
+        const isAvail = su.newStock === 0 ? 0 : 1;
+        updateStockStmt.run(su.newStock, isAvail, su.id);
+        if (isAvail === 0) {
+          outOfStockItems.push(su.id);
+        }
+      }
     });
 
     insertTransaction();
+
+    // Broadcast stock updates if any
+    try {
+      const io = getIO();
+      for (const itemId of outOfStockItems) {
+        io.emit('menu:availability_changed', { id: itemId, is_available: 0 });
+      }
+    } catch (_) {}
 
     // Fetch the created full order object
     const rawOrder = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId);
@@ -195,11 +250,11 @@ router.get('/:id', (req, res) => {
   }
 });
 
-// PATCH /api/orders/:id/status - Admin status progression
+// PATCH /api/orders/:id/status - Admin status progression & cancellation with reason
 router.patch('/:id/status', authenticateAdmin, (req, res) => {
   try {
     const { id } = req.params;
-    const { status } = req.body;
+    const { status, cancelReason } = req.body;
 
     const validStatuses = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'COMPLETED', 'CANCELLED'];
     if (!validStatuses.includes(status)) {
@@ -211,7 +266,34 @@ router.patch('/:id/status', authenticateAdmin, (req, res) => {
       return res.status(404).json({ success: false, message: 'Pesanan tidak ditemukan' });
     }
 
-    db.prepare('UPDATE orders SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(status, id);
+    // If cancelling, restore stock and save cancellation reason
+    if (status === 'CANCELLED' && order.status !== 'CANCELLED') {
+      const orderItems = db.prepare('SELECT * FROM order_items WHERE order_id = ?').all(id);
+      const restoredItems = [];
+      for (const oi of orderItems) {
+        const mi = db.prepare('SELECT id, stock FROM menu_items WHERE id = ?').get(oi.menu_item_id);
+        if (mi && mi.stock !== null && mi.stock !== undefined) {
+          const newStock = mi.stock + oi.quantity;
+          db.prepare('UPDATE menu_items SET stock = ?, is_available = 1 WHERE id = ?').run(newStock, mi.id);
+          restoredItems.push(mi.id);
+        }
+      }
+
+      db.prepare(`
+        UPDATE orders 
+        SET status = 'CANCELLED', cancel_reason = ?, updated_at = CURRENT_TIMESTAMP 
+        WHERE id = ?
+      `).run(cancelReason || 'Dibatalkan oleh pihak kasir/dapur', id);
+
+      try {
+        const io = getIO();
+        for (const rId of restoredItems) {
+          io.emit('menu:availability_changed', { id: rId, is_available: 1 });
+        }
+      } catch (_) {}
+    } else {
+      db.prepare('UPDATE orders SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(status, id);
+    }
 
     const updatedOrder = normalizeOrder({
       ...db.prepare('SELECT * FROM orders WHERE id = ?').get(id),
@@ -233,6 +315,46 @@ router.patch('/:id/status', authenticateAdmin, (req, res) => {
       message: `Status pesanan #${order.order_number} diperbarui menjadi ${status}`,
       data: updatedOrder,
     });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// GET /api/orders/export/csv - Export orders to CSV for spreadsheet / financial reporting
+router.get('/export/csv', authenticateAdmin, (req, res) => {
+  try {
+    const orders = db.prepare(`
+      SELECT o.*, 
+        (SELECT GROUP_CONCAT(oi.quantity || 'x ' || oi.item_name, '; ') FROM order_items oi WHERE oi.order_id = o.id) as items_summary
+      FROM orders o
+      ORDER BY o.created_at DESC
+    `).all();
+
+    // Create CSV content with UTF-8 BOM so Excel opens it with proper character rendering
+    let csv = '\uFEFF';
+    csv += 'No Pesanan,Nomor Meja,Nama Pelanggan,Daftar Menu,Subtotal,Pajak PB1,Total Bayar,Metode Bayar,Status Bayar,Status Pesanan,Alasan Batal,Waktu Dibuat\n';
+
+    for (const ord of orders) {
+      const esc = (val) => `"${String(val || '').replace(/"/g, '""')}"`;
+      csv += [
+        esc(ord.order_number),
+        esc(ord.table_number),
+        esc(ord.customer_name),
+        esc(ord.items_summary),
+        ord.subtotal,
+        ord.tax,
+        ord.total_amount,
+        esc(ord.payment_method),
+        esc(ord.payment_status),
+        esc(ord.status),
+        esc(ord.cancel_reason || '-'),
+        esc(ord.created_at),
+      ].join(',') + '\n';
+    }
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="laporan-pesanan-lajava-${new Date().toISOString().slice(0, 10)}.csv"`);
+    return res.send(csv);
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
   }

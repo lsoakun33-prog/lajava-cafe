@@ -77,7 +77,28 @@ function initDatabase() {
       notes TEXT,
       FOREIGN KEY (order_id) REFERENCES orders (id) ON DELETE CASCADE
     );
+
+    CREATE TABLE IF NOT EXISTS waiter_calls (
+      id TEXT PRIMARY KEY,
+      table_number TEXT NOT NULL,
+      call_type TEXT NOT NULL,
+      note TEXT,
+      status TEXT DEFAULT 'PENDING',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      resolved_at DATETIME
+    );
   `);
+
+  // Safe schema migrations for existing databases
+  try {
+    db.prepare('ALTER TABLE orders ADD COLUMN cancel_reason TEXT').run();
+  } catch (_) {}
+  try {
+    db.prepare('ALTER TABLE orders ADD COLUMN table_token TEXT').run();
+  } catch (_) {}
+  try {
+    db.prepare('ALTER TABLE menu_items ADD COLUMN stock INTEGER DEFAULT NULL').run();
+  } catch (_) {}
 
   seedInitialData();
 }

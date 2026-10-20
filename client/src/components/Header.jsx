@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShoppingBag, QrCode, Shield, Clock, Coffee } from 'lucide-react';
+import { ShoppingBag, QrCode, Shield, Clock, Coffee, Bell, History } from 'lucide-react';
 
 export default function Header({
   tableNumber,
@@ -9,6 +9,9 @@ export default function Header({
   onOpenOrderHistory,
   hasActiveOrder,
   onSwitchToAdmin,
+  onOpenCallWaiter,
+  onOpenPastOrders,
+  pastOrdersCount = 0,
 }) {
   return (
     <header className="sticky top-0 z-40 bg-zinc-950/80 backdrop-blur-xl border-b border-zinc-800/80 px-4 lg:px-8 py-3.5 transition-all">
@@ -38,7 +41,33 @@ export default function Header({
         </div>
 
         {/* Right side controls */}
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div className="flex items-center gap-2 sm:gap-2.5">
+          {/* Call Waiter Button */}
+          {onOpenCallWaiter && (
+            <button
+              onClick={onOpenCallWaiter}
+              title="Panggil Pelayan ke Meja"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-zinc-800 bg-zinc-900/80 hover:bg-zinc-800 hover:border-zinc-700 text-zinc-300 hover:text-white transition-all text-xs font-medium"
+            >
+              <Bell className="w-3.5 h-3.5 text-zinc-400" />
+              <span className="hidden md:inline">Panggil Pelayan</span>
+            </button>
+          )}
+
+          {/* Past Orders History Button */}
+          {pastOrdersCount > 0 && onOpenPastOrders && (
+            <button
+              onClick={onOpenPastOrders}
+              title="Lihat Riwayat Pesanan Sesi Ini"
+              className="relative p-2 rounded-xl border border-zinc-800 bg-zinc-900/80 hover:bg-zinc-800 hover:border-zinc-700 text-zinc-300 hover:text-white transition-all text-xs flex items-center justify-center"
+            >
+              <History className="w-4 h-4" />
+              <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-zinc-700 text-white text-[9px] font-bold border border-zinc-900 flex items-center justify-center">
+                {pastOrdersCount}
+              </span>
+            </button>
+          )}
+
           {/* Table Badge & Scanner Trigger */}
           <button
             onClick={onOpenQRScanner}

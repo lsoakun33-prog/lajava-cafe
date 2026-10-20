@@ -1,8 +1,13 @@
-import React from 'react';
-import { DollarSign, ShoppingBag, Clock, CheckCircle2, TrendingUp, Trophy } from 'lucide-react';
+import React, { useState } from 'react';
+import { DollarSign, ShoppingBag, Clock, CheckCircle2, TrendingUp, Trophy, Download, Printer, FileSpreadsheet } from 'lucide-react';
 import { formatRupiah } from '../../utils/format';
+import { api } from '../../api';
+import ZReportModal from './ZReportModal';
 
-export default function AnalyticsTab({ stats = null, onRefresh }) {
+export default function AnalyticsTab({ stats = null, orders = [], onRefresh }) {
+  const [isZReportOpen, setIsZReportOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+
   if (!stats) {
     return (
       <div className="py-20 text-center text-zinc-500 text-xs">
@@ -19,16 +24,48 @@ export default function AnalyticsTab({ stats = null, onRefresh }) {
     topItems = [],
   } = stats;
 
+  const handleExportCsv = async () => {
+    setIsExporting(true);
+    try {
+      await api.downloadOrdersCsv();
+    } catch (err) {
+      alert(err.message || 'Gagal mengekspor data.');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
-      {/* Top Banner */}
-      <div>
-        <h2 className="text-base font-bold text-white tracking-wide">
-          Ringkasan & Analitik Restoran
-        </h2>
-        <p className="text-xs text-zinc-400">
-          Statistik performa penjualan dan pesanan real-time
-        </p>
+      {/* Top Banner with Action Buttons */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 rounded-3xl bg-zinc-950 border border-zinc-800">
+        <div>
+          <h2 className="text-base font-bold text-white tracking-wide">
+            Ringkasan & Analitik Restoran
+          </h2>
+          <p className="text-xs text-zinc-400">
+            Statistik performa penjualan, pesanan real-time, dan penutupan kasir
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleExportCsv}
+            disabled={isExporting}
+            className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-zinc-800 bg-zinc-900/80 text-zinc-300 hover:text-white hover:border-zinc-700 text-xs font-semibold transition-colors disabled:opacity-50"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>{isExporting ? 'Mengekspor...' : 'Export CSV'}</span>
+          </button>
+
+          <button
+            onClick={() => setIsZReportOpen(true)}
+            className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-white text-black text-xs font-bold uppercase tracking-wider hover:bg-zinc-200 transition-colors shadow-lg"
+          >
+            <Printer className="w-3.5 h-3.5" />
+            <span>Laporan Kasir (Z-Report)</span>
+          </button>
+        </div>
       </div>
 
       {/* KPI Cards */}
@@ -151,6 +188,14 @@ export default function AnalyticsTab({ stats = null, onRefresh }) {
           </div>
         )}
       </div>
+
+      {/* Z-Report Printable Modal */}
+      <ZReportModal
+        isOpen={isZReportOpen}
+        onClose={() => setIsZReportOpen(false)}
+        stats={stats}
+        orders={orders}
+      />
     </div>
   );
 }

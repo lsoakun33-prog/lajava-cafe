@@ -21,6 +21,15 @@ export function joinOrderRoom(orderId) {
   }
 }
 
-export function joinAdminRoom() {
-  socket.emit('join:admin');
+export function joinAdminRoom(token) {
+  const adminToken = token || localStorage.getItem('noir_admin_token');
+  if (adminToken) {
+    socket.emit('join:admin', adminToken);
+  }
+}
+
+export function emitCallWaiter(tableNumber, callType = 'BANTUAN', note = '') {
+  if (tableNumber) {
+    socket.emit('call:waiter', { tableNumber, callType, note });
+  }
 }

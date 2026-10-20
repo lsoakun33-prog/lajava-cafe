@@ -119,6 +119,28 @@ export const api = {
     });
   },
 
+  async validateTable(table, token) {
+    const query = new URLSearchParams({ table, ...(token ? { token } : {}) }).toString();
+    return request(`/tables/validate?${query}`);
+  },
+
+  async callWaiter(tableNumber, callType = 'BANTUAN', note = '') {
+    return request('/tables/calls', {
+      method: 'POST',
+      body: JSON.stringify({ tableNumber, callType, note }),
+    });
+  },
+
+  async getWaiterCalls() {
+    return request('/tables/calls');
+  },
+
+  async resolveWaiterCall(id) {
+    return request(`/tables/calls/${id}/resolve`, {
+      method: 'PATCH',
+    });
+  },
+
   // Orders
   async createOrder(orderPayload) {
     return request('/orders', {
@@ -136,10 +158,10 @@ export const api = {
     return request(`/orders/${id}`);
   },
 
-  async updateOrderStatus(id, status) {
+  async updateOrderStatus(id, status, cancelReason = '') {
     return request(`/orders/${id}/status`, {
       method: 'PATCH',
-      body: JSON.stringify({ status }),
+      body: JSON.stringify({ status, cancelReason }),
     });
   },
 
@@ -152,5 +174,24 @@ export const api = {
 
   async getStats() {
     return request('/orders/stats/summary');
+  },
+
+  async downloadOrdersCsv() {
+    const token = localStorage.getItem('noir_admin_token');
+    const res = await fetch('/api/orders/export/csv', {
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+    if (!res.ok) throw new Error('Gagal mengunduh laporan CSV');
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `laporan-pesanan-lajava-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
   },
 };

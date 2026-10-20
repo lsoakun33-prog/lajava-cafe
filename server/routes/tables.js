@@ -5,10 +5,10 @@ const crypto = require('crypto');
 const db = require('../db');
 const { authenticateAdmin } = require('./auth');
 
-// Helper to generate QR Data URL
-async function generateTableQRCode(tableNumber, clientBaseUrl) {
-  // Encodes customer direct order URL: e.g. http://localhost:5173/?table=Meja%2001
-  const targetUrl = `${clientBaseUrl}/?table=${encodeURIComponent(tableNumber)}`;
+// Helper to generate QR Data URL with anti-spoofing token
+async function generateTableQRCode(tableNumber, qrToken, clientBaseUrl) {
+  // Encodes customer direct order URL with secure token: e.g. http://localhost:5173/?table=Meja%2001&token=qr_xxx
+  const targetUrl = `${clientBaseUrl}/?table=${encodeURIComponent(tableNumber)}&token=${encodeURIComponent(qrToken || '')}`;
   const qrDataUrl = await QRCode.toDataURL(targetUrl, {
     width: 400,
     margin: 2,
@@ -34,7 +34,7 @@ router.get('/', async (req, res) => {
     // Attach QR code data to each table
     const tablesWithQR = await Promise.all(
       tables.map(async (tbl) => {
-        const { targetUrl, qrDataUrl } = await generateTableQRCode(tbl.table_number, clientBaseUrl);
+        const { targetUrl, qrDataUrl } = await generateTableQRCode(tbl.table_number, tbl.qr_token, clientBaseUrl);
         return {
           ...tbl,
           orderUrl: targetUrl,
@@ -44,6 +44,108 @@ router.get('/', async (req, res) => {
     );
 
     return res.json({ success: true, data: tablesWithQR });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// GET /api/tables/validate - Validate QR Table & Token
+router.get('/validate', (req, res) => {
+  try {
+    const { table, token } = req.query;
+    if (!table) {
+      return res.status(400).json({ success: false, message: 'Parameter table wajib diisi' });
+    }
+
+    const tableRow = db.prepare('SELECT * FROM tables WHERE table_number = ?').get(table);
+    if (!tableRow) {
+      return res.json({ success: true, valid: false, message: 'Meja tidak ditemukan di sistem' });
+    }
+
+    // If token provided, verify match
+    if (token && tableRow.qr_token !== token) {
+      return res.json({ success: true, valid: false, message: 'Token QR Meja tidak valid' });
+    }
+
+    return res.json({
+      success: true,
+      valid: true,
+      table: {
+        id: tableRow.id,
+        table_number: tableRow.table_number,
+        capacity: tableRow.capacity,
+        status: tableRow.status,
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// POST /api/tables/calls - Customer calls waiter
+router.post('/calls', (req, res) => {
+  try {
+    const { tableNumber, callType = 'BANTUAN', note = '' } = req.body;
+    if (!tableNumber) {
+      return res.status(400).json({ success: false, message: 'Nomor meja wajib diisi' });
+    }
+
+    const id = `call_${crypto.randomUUID().slice(0, 8)}`;
+    db.prepare(`
+      INSERT INTO waiter_calls (id, table_number, call_type, note, status)
+      VALUES (?, ?, ?, ?, 'PENDING')
+    `).run(id, tableNumber, callType, note);
+
+    const callData = {
+      id,
+      table_number: tableNumber,
+      call_type: callType,
+      note,
+      status: 'PENDING',
+      created_at: new Date().toISOString(),
+    };
+
+    try {
+      const { getIO } = require('../socket');
+      getIO().to('admin:room').emit('waiter:called', callData);
+    } catch (_) {}
+
+    return res.status(201).json({ success: true, message: 'Panggilan pelayan terkirim', data: callData });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// GET /api/tables/calls - Admin retrieves active waiter calls
+router.get('/calls', authenticateAdmin, (req, res) => {
+  try {
+    const calls = db.prepare(`
+      SELECT * FROM waiter_calls 
+      WHERE status = 'PENDING' 
+      ORDER BY created_at DESC
+    `).all();
+    return res.json({ success: true, data: calls });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// PATCH /api/tables/calls/:id/resolve - Admin marks waiter call as resolved
+router.patch('/calls/:id/resolve', authenticateAdmin, (req, res) => {
+  try {
+    const { id } = req.params;
+    db.prepare(`
+      UPDATE waiter_calls 
+      SET status = 'RESOLVED', resolved_at = CURRENT_TIMESTAMP 
+      WHERE id = ?
+    `).run(id);
+
+    try {
+      const { getIO } = require('../socket');
+      getIO().to('admin:room').emit('waiter:resolved', { id });
+    } catch (_) {}
+
+    return res.json({ success: true, message: 'Panggilan pelayan ditandai selesai' });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
   }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { ArrowRight, ShoppingBag, Sparkles, AlertCircle } from 'lucide-react';
+import { ArrowRight, ShoppingBag, Sparkles, AlertCircle, WifiOff } from 'lucide-react';
 import Header from '../components/Header';
 import CategoryFilter from '../components/CategoryFilter';
 import MenuItemCard from '../components/MenuItemCard';
@@ -8,6 +8,8 @@ import CartDrawer from '../components/CartDrawer';
 import OrderStatusModal from '../components/OrderStatusModal';
 import QRScannerModal from '../components/QRScannerModal';
 import ReceiptModal from '../components/ReceiptModal';
+import CallWaiterModal from '../components/CallWaiterModal';
+import OrderHistoryModal from '../components/OrderHistoryModal';
 import { api } from '../api';
 import { socket, joinTableRoom, joinOrderRoom } from '../socket';
 import { formatRupiah } from '../utils/format';
@@ -20,6 +22,20 @@ export default function CustomerView({ onSwitchToAdmin }) {
     if (tableParam) return decodeURIComponent(tableParam);
     return localStorage.getItem('noir_customer_table') || 'Meja 01';
   });
+
+  // Table Token for QR anti-spoofing
+  const [tableToken, setTableToken] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tokenParam = params.get('token');
+    if (tokenParam) {
+      localStorage.setItem('noir_table_token', tokenParam);
+      return tokenParam;
+    }
+    return localStorage.getItem('noir_table_token') || '';
+  });
+
+  // Online / Offline network state
+  const [isOnline, setIsOnline] = useState(socket.connected);
 
   // Customer name saved across orders
   const [customerName, setCustomerName] = useState(() => {
@@ -54,11 +70,23 @@ export default function CustomerView({ onSwitchToAdmin }) {
     }
   });
 
+  // Session Order History
+  const [orderHistory, setOrderHistory] = useState(() => {
+    try {
+      const saved = localStorage.getItem('noir_order_history');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
   // Modals state
   const [selectedItemForModal, setSelectedItemForModal] = useState(null);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isOrderStatusOpen, setIsOrderStatusOpen] = useState(false);
   const [isQRScannerOpen, setIsQRScannerOpen] = useState(false);
+  const [isCallWaiterOpen, setIsCallWaiterOpen] = useState(false);
+  const [isOrderHistoryOpen, setIsOrderHistoryOpen] = useState(false);
   const [receiptOrder, setReceiptOrder] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -82,6 +110,25 @@ export default function CustomerView({ onSwitchToAdmin }) {
   const handleOrderUpdated = useCallback((updatedOrder) => {
     setActiveOrder(updatedOrder);
     localStorage.setItem('noir_active_order', JSON.stringify(updatedOrder));
+    setOrderHistory((prev) => {
+      const next = prev.some((o) => o.id === updatedOrder.id)
+        ? prev.map((o) => (o.id === updatedOrder.id ? updatedOrder : o))
+        : [updatedOrder, ...prev];
+      localStorage.setItem('noir_order_history', JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
+  // Online / Offline listener
+  useEffect(() => {
+    const onConnect = () => setIsOnline(true);
+    const onDisconnect = () => setIsOnline(false);
+    socket.on('connect', onConnect);
+    socket.on('disconnect', onDisconnect);
+    return () => {
+      socket.off('connect', onConnect);
+      socket.off('disconnect', onDisconnect);
+    };
   }, []);
 
   // ─── Customer clicks "Selesai ✓" → clear IMMEDIATELY ────────────────────────
@@ -253,7 +300,12 @@ export default function CustomerView({ onSwitchToAdmin }) {
       // Save customer name for convenience
       localStorage.setItem('noir_customer_name', orderPayload.customerName);
 
-      const res = await api.createOrder(orderPayload);
+      const payloadWithToken = {
+        ...orderPayload,
+        tableToken: tableToken || undefined,
+      };
+
+      const res = await api.createOrder(payloadWithToken);
       if (res.success && res.data) {
         let finalOrder = res.data;
 
@@ -265,6 +317,14 @@ export default function CustomerView({ onSwitchToAdmin }) {
 
         setActiveOrder(finalOrder);
         localStorage.setItem('noir_active_order', JSON.stringify(finalOrder));
+
+        // Save to multi-order history
+        setOrderHistory((prev) => {
+          const next = [finalOrder, ...prev.filter((o) => o.id !== finalOrder.id)];
+          localStorage.setItem('noir_order_history', JSON.stringify(next));
+          return next;
+        });
+
         joinOrderRoom(finalOrder.id);
 
         // Clear cart
@@ -307,6 +367,14 @@ export default function CustomerView({ onSwitchToAdmin }) {
 
   return (
     <div className="min-h-screen bg-black text-white flex flex-col selection:bg-white selection:text-black">
+      {/* Offline / Reconnecting Alert Banner */}
+      {!isOnline && (
+        <div className="bg-zinc-900 border-b border-zinc-800 text-zinc-300 py-2 px-4 text-center text-xs flex items-center justify-center gap-2 sticky top-0 z-50 animate-pulse">
+          <WifiOff className="w-4 h-4 text-zinc-400" />
+          <span>Koneksi terputus. Mencoba menghubungkan kembali ke dapur &amp; kasir...</span>
+        </div>
+      )}
+
       {/* Header */}
       <Header
         tableNumber={tableNumber}
@@ -316,6 +384,9 @@ export default function CustomerView({ onSwitchToAdmin }) {
         onOpenOrderHistory={() => setIsOrderStatusOpen(true)}
         hasActiveOrder={!!activeOrder}
         onSwitchToAdmin={onSwitchToAdmin}
+        onOpenCallWaiter={() => setIsCallWaiterOpen(true)}
+        onOpenPastOrders={() => setIsOrderHistoryOpen(true)}
+        pastOrdersCount={orderHistory.length}
       />
 
       {/* Main Container */}
@@ -455,6 +526,25 @@ export default function CustomerView({ onSwitchToAdmin }) {
       <ReceiptModal
         order={receiptOrder}
         onClose={() => setReceiptOrder(null)}
+      />
+
+      {/* Call Waiter Dialog */}
+      <CallWaiterModal
+        isOpen={isCallWaiterOpen}
+        onClose={() => setIsCallWaiterOpen(false)}
+        tableNumber={tableNumber}
+      />
+
+      {/* Session Order History Dialog */}
+      <OrderHistoryModal
+        isOpen={isOrderHistoryOpen}
+        onClose={() => setIsOrderHistoryOpen(false)}
+        orders={orderHistory}
+        onViewReceipt={(order) => setReceiptOrder(order)}
+        onViewStatus={(order) => {
+          setActiveOrder(order);
+          setIsOrderStatusOpen(true);
+        }}
       />
     </div>
   );

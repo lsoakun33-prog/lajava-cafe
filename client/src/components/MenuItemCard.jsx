@@ -38,12 +38,16 @@ export default function MenuItemCard({ item, onSelect, onQuickAdd }) {
             {item.prep_time || 15} m
           </span>
 
-          {!isAvailable && (
+          {!isAvailable ? (
             <span className="px-2 py-0.5 rounded-full text-[9px] font-bold tracking-wider uppercase bg-zinc-800 text-zinc-300 border border-zinc-700 flex items-center gap-1">
               <Ban className="w-2.5 h-2.5 text-zinc-400" />
               Habis
             </span>
-          )}
+          ) : item.stock !== null && item.stock !== undefined && item.stock <= 5 && item.stock > 0 ? (
+            <span className="px-2 py-0.5 rounded-full text-[9px] font-bold tracking-wider uppercase bg-white text-black border border-white">
+              Sisa {item.stock}
+            </span>
+          ) : null}
         </div>
       </div>
 

@@ -112,9 +112,15 @@ export default function MenuTab({
                   <p className="font-mono text-xs font-semibold text-zinc-200 mt-1">
                     {formatRupiah(item.price)}
                   </p>
-                  <div className="flex items-center gap-1 text-[10px] text-zinc-500 mt-1">
-                    <Clock className="w-3 h-3" />
-                    <span>~{item.prep_time || 15} menit</span>
+                  <div className="flex items-center gap-2 text-[10px] text-zinc-500 mt-1">
+                    <div className="flex items-center gap-1">
+                      <Clock className="w-3 h-3" />
+                      <span>~{item.prep_time || 15} m</span>
+                    </div>
+                    <span>•</span>
+                    <span className={item.stock !== null && item.stock <= 5 ? 'text-zinc-300 font-bold' : ''}>
+                      Stok: {item.stock !== null && item.stock !== undefined ? `${item.stock} porsi` : 'Tak Terbatas'}
+                    </span>
                   </div>
                 </div>
               </div>

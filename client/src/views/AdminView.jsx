@@ -10,7 +10,7 @@ import TableFormModal from '../components/admin/TableFormModal';
 import ReceiptModal from '../components/ReceiptModal';
 import { api } from '../api';
 import { socket, joinAdminRoom } from '../socket';
-import { playNotificationSound } from '../utils/sound';
+import { playNotificationSound, playWaiterBellSound } from '../utils/sound';
 
 export default function AdminView({ onSwitchToCustomer }) {
   const [user, setUser] = useState(() => api.getStoredUser());
@@ -32,6 +32,7 @@ export default function AdminView({ onSwitchToCustomer }) {
   const [categories, setCategories] = useState([]);
   const [tables, setTables] = useState([]);
   const [stats, setStats] = useState(null);
+  const [waiterCalls, setWaiterCalls] = useState([]);
 
   // Modals state
   const [isMenuModalOpen, setIsMenuModalOpen] = useState(false);
@@ -42,7 +43,7 @@ export default function AdminView({ onSwitchToCustomer }) {
   // Check login on load
   useEffect(() => {
     if (token) {
-      joinAdminRoom();
+      joinAdminRoom(token);
       loadAllAdminData();
     }
   }, [token]);
@@ -76,25 +77,41 @@ export default function AdminView({ onSwitchToCustomer }) {
       );
     };
 
+    const handleWaiterCalled = (call) => {
+      if (isSoundEnabled) {
+        playWaiterBellSound();
+      }
+      setWaiterCalls((prev) => [call, ...prev.filter((c) => c.id !== call.id)]);
+    };
+
+    const handleWaiterResolved = ({ id }) => {
+      setWaiterCalls((prev) => prev.filter((c) => c.id !== id));
+    };
+
     socket.on('order:new', handleNewOrder);
     socket.on('order:status_updated', handleStatusUpdated);
     socket.on('order:payment_updated', handlePaymentUpdated);
+    socket.on('waiter:called', handleWaiterCalled);
+    socket.on('waiter:resolved', handleWaiterResolved);
 
     return () => {
       socket.off('order:new', handleNewOrder);
       socket.off('order:status_updated', handleStatusUpdated);
       socket.off('order:payment_updated', handlePaymentUpdated);
+      socket.off('waiter:called', handleWaiterCalled);
+      socket.off('waiter:resolved', handleWaiterResolved);
     };
   }, [token, isSoundEnabled]);
 
   const loadAllAdminData = async () => {
     try {
-      const [ordRes, itemRes, catRes, tblRes, statRes] = await Promise.all([
+      const [ordRes, itemRes, catRes, tblRes, statRes, callRes] = await Promise.all([
         api.getOrders().catch(() => ({ data: [] })),
         api.getMenuItems().catch(() => ({ data: [] })),
         api.getCategories().catch(() => ({ data: [] })),
         api.getTables().catch(() => ({ data: [] })),
         api.getStats().catch(() => ({ data: null })),
+        api.getWaiterCalls().catch(() => ({ data: [] })),
       ]);
 
       setOrders(ordRes.data || []);
@@ -102,8 +119,18 @@ export default function AdminView({ onSwitchToCustomer }) {
       setCategories(catRes.data || []);
       setTables(tblRes.data || []);
       setStats(statRes.data || null);
+      setWaiterCalls(callRes.data || []);
     } catch (err) {
       console.error('Failed to load admin data:', err);
+    }
+  };
+
+  const handleResolveWaiterCall = async (callId) => {
+    try {
+      await api.resolveWaiterCall(callId);
+      setWaiterCalls((prev) => prev.filter((c) => c.id !== callId));
+    } catch (err) {
+      console.error('Failed to resolve waiter call:', err);
     }
   };
 
@@ -131,10 +158,10 @@ export default function AdminView({ onSwitchToCustomer }) {
     setToken(null);
   };
 
-  // Status Change
-  const handleUpdateOrderStatus = async (orderId, newStatus) => {
+  // Status Change (supports cancelReason)
+  const handleUpdateOrderStatus = async (orderId, newStatus, cancelReason = '') => {
     try {
-      const res = await api.updateOrderStatus(orderId, newStatus);
+      const res = await api.updateOrderStatus(orderId, newStatus, cancelReason);
       if (res.success) {
         setOrders((prev) =>
           prev.map((o) => (o.id === orderId ? res.data : o))
@@ -330,6 +357,33 @@ export default function AdminView({ onSwitchToCustomer }) {
         user={user}
       />
 
+      {/* Real-Time Waiter Calls Alert Bar */}
+      {waiterCalls.length > 0 && (
+        <div className="bg-zinc-900 border-b border-zinc-800 px-4 lg:px-8 py-2.5 animate-pulse">
+          <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5 text-xs">
+              <span className="w-2.5 h-2.5 rounded-full bg-white animate-ping"></span>
+              <span className="font-bold text-white uppercase tracking-wider">
+                Panggilan Meja ({waiterCalls.length}):
+              </span>
+              <span className="text-zinc-300">
+                <span className="font-bold text-white">{waiterCalls[0].table_number}</span> —{' '}
+                {waiterCalls[0].call_type.replace(/_/g, ' ')}
+                {waiterCalls[0].note ? ` ("${waiterCalls[0].note}")` : ''}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => handleResolveWaiterCall(waiterCalls[0].id)}
+                className="px-3 py-1 rounded-lg bg-white text-black text-xs font-bold uppercase hover:bg-zinc-200 transition-colors"
+              >
+                ✓ Tandai Sudah Ditangani
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Main Content */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 lg:px-8 py-6 pb-20">
         {activeTab === 'orders' && (
@@ -368,7 +422,7 @@ export default function AdminView({ onSwitchToCustomer }) {
         )}
 
         {activeTab === 'analytics' && (
-          <AnalyticsTab stats={stats} onRefresh={loadAllAdminData} />
+          <AnalyticsTab stats={stats} orders={orders} onRefresh={loadAllAdminData} />
         )}
       </main>
 

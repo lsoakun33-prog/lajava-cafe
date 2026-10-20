@@ -82,18 +82,20 @@ router.get('/items', (req, res) => {
 // POST /api/menu/items (Admin)
 router.post('/items', authenticateAdmin, (req, res) => {
   try {
-    const { category_id, name, description, price, image, prep_time } = req.body;
+    const { category_id, name, description, price, image, prep_time, stock } = req.body;
     if (!category_id || !name || price === undefined) {
       return res.status(400).json({ success: false, message: 'Data nama, kategori, dan harga wajib diisi' });
     }
 
     const id = `item_${crypto.randomUUID().slice(0, 8)}`;
     const finalImage = image || 'https://images.unsplash.com/photo-1510707577719-ae7c14805e3a?w=600&auto=format&fit=crop&q=80';
+    const parsedStock = stock !== undefined && stock !== null && stock !== '' ? Math.max(0, parseInt(stock, 10)) : null;
+    const initialAvailable = parsedStock === 0 ? 0 : 1;
 
     db.prepare(`
-      INSERT INTO menu_items (id, category_id, name, description, price, image, is_available, prep_time)
-      VALUES (?, ?, ?, ?, ?, ?, 1, ?)
-    `).run(id, category_id, name, description || '', Number(price), finalImage, Number(prep_time) || 15);
+      INSERT INTO menu_items (id, category_id, name, description, price, image, is_available, prep_time, stock)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, category_id, name, description || '', Number(price), finalImage, initialAvailable, Number(prep_time) || 15, parsedStock);
 
     const newItem = db.prepare(`
       SELECT m.*, c.name as category_name 
@@ -117,11 +119,21 @@ router.post('/items', authenticateAdmin, (req, res) => {
 router.put('/items/:id', authenticateAdmin, (req, res) => {
   try {
     const { id } = req.params;
-    const { category_id, name, description, price, image, is_available, prep_time } = req.body;
+    const { category_id, name, description, price, image, is_available, prep_time, stock } = req.body;
 
     const existing = db.prepare('SELECT * FROM menu_items WHERE id = ?').get(id);
     if (!existing) {
       return res.status(404).json({ success: false, message: 'Menu tidak ditemukan' });
+    }
+
+    let parsedStock = existing.stock;
+    if (stock !== undefined) {
+      parsedStock = stock === '' || stock === null ? null : Math.max(0, parseInt(stock, 10));
+    }
+
+    let finalAvailable = is_available !== undefined ? (is_available ? 1 : 0) : existing.is_available;
+    if (parsedStock === 0) {
+      finalAvailable = 0; // Auto sold-out if stock hits 0
     }
 
     db.prepare(`
@@ -131,8 +143,9 @@ router.put('/items/:id', authenticateAdmin, (req, res) => {
           description = COALESCE(?, description),
           price = COALESCE(?, price),
           image = COALESCE(?, image),
-          is_available = COALESCE(?, is_available),
+          is_available = ?,
           prep_time = COALESCE(?, prep_time),
+          stock = ?,
           updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `).run(
@@ -141,8 +154,9 @@ router.put('/items/:id', authenticateAdmin, (req, res) => {
       description,
       price !== undefined ? Number(price) : null,
       image,
-      is_available !== undefined ? (is_available ? 1 : 0) : null,
+      finalAvailable,
       prep_time !== undefined ? Number(prep_time) : null,
+      parsedStock,
       id
     );
 
