@@ -1,5 +1,19 @@
 import React, { useState } from 'react';
-import { X, Trash2, Plus, Minus, ShoppingBag, ArrowRight, CreditCard, Banknote, QrCode, AlertCircle, CheckCircle2 } from 'lucide-react';
+import {
+  X,
+  Trash2,
+  Plus,
+  Minus,
+  ShoppingBag,
+  ArrowRight,
+  CreditCard,
+  Banknote,
+  QrCode,
+  AlertCircle,
+  CheckCircle2,
+  Pencil,
+  Check,
+} from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { formatRupiah } from '../utils/format';
 
@@ -12,6 +26,7 @@ export default function CartDrawer({
   setCustomerName,
   onUpdateQuantity,
   onRemoveItem,
+  onUpdateNotes,
   onClearCart,
   onSubmitOrder,
   isSubmitting,
@@ -21,10 +36,33 @@ export default function CartDrawer({
   const [showQRISModal, setShowQRISModal] = useState(false);
   const [nameError, setNameError] = useState('');
 
+  // Inline Note Editing State
+  const [editingKey, setEditingKey] = useState(null);
+  const [editingNoteValue, setEditingNoteValue] = useState('');
+
   const subtotal = cart.reduce((acc, item) => acc + item.price * item.quantity, 0);
   const tax = Math.round(subtotal * 0.1);
   const total = subtotal + tax;
   const totalItems = cart.reduce((acc, item) => acc + item.quantity, 0);
+
+  const startEditingNote = (item) => {
+    const key = `${item.id}_${item.notes || ''}`;
+    setEditingKey(key);
+    setEditingNoteValue(item.notes || '');
+  };
+
+  const handleSaveNote = (item) => {
+    if (onUpdateNotes) {
+      onUpdateNotes(item.id, item.notes, editingNoteValue);
+    }
+    setEditingKey(null);
+    setEditingNoteValue('');
+  };
+
+  const handleCancelEdit = () => {
+    setEditingKey(null);
+    setEditingNoteValue('');
+  };
 
   const handleProceed = () => {
     if (!customerName || customerName.trim() === '') {
@@ -94,50 +132,141 @@ export default function CartDrawer({
             ) : (
               <>
                 <div className="space-y-3">
-                  {cart.map((item) => (
-                    <div
-                      key={item.id + (item.notes || '')}
-                      className="p-3.5 rounded-2xl bg-zinc-900/60 border border-zinc-800/80 flex items-center justify-between gap-3"
-                    >
-                      <div className="flex-1 min-w-0">
-                        <h4 className="text-xs font-bold text-white truncate">{item.name}</h4>
-                        <p className="font-mono text-xs text-zinc-300 mt-0.5">
-                          {formatRupiah(item.price * item.quantity)}
-                        </p>
-                        {item.notes && (
-                          <p className="text-[10px] text-zinc-400 italic mt-1 truncate">
-                            * {item.notes}
-                          </p>
+                  {cart.map((item) => {
+                    const itemKey = `${item.id}_${item.notes || ''}`;
+                    const isEditing = editingKey === itemKey;
+
+                    return (
+                      <div
+                        key={itemKey}
+                        className="p-3.5 rounded-2xl bg-zinc-900/60 border border-zinc-800/80 space-y-2.5 transition-all"
+                      >
+                        {/* Main Item Row */}
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            <h4 className="text-xs font-bold text-white truncate">{item.name}</h4>
+                            <p className="font-mono text-xs text-zinc-300 mt-0.5">
+                              {formatRupiah(item.price * item.quantity)}
+                            </p>
+                          </div>
+
+                          {/* Qty changer */}
+                          <div className="flex items-center gap-2 bg-zinc-950 border border-zinc-800 rounded-xl p-1 shrink-0">
+                            <button
+                              onClick={() => onUpdateQuantity(item.id, item.notes, item.quantity - 1)}
+                              className="p-1 rounded text-zinc-400 hover:text-white transition-colors"
+                            >
+                              <Minus className="w-3.5 h-3.5" />
+                            </button>
+                            <span className="font-mono text-xs font-bold text-white w-4 text-center">
+                              {item.quantity}
+                            </span>
+                            <button
+                              onClick={() => onUpdateQuantity(item.id, item.notes, item.quantity + 1)}
+                              className="p-1 rounded text-zinc-400 hover:text-white transition-colors"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+
+                          <button
+                            onClick={() => onRemoveItem(item.id, item.notes)}
+                            className="p-1.5 rounded-lg text-zinc-500 hover:text-white hover:bg-zinc-800 transition-colors"
+                            title="Hapus menu dari keranjang"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+
+                        {/* Note Section: Display or Inline Edit Form */}
+                        {isEditing ? (
+                          <div className="pt-2 border-t border-zinc-800/80 space-y-2 animate-fade-in">
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                type="text"
+                                value={editingNoteValue}
+                                onChange={(e) => setEditingNoteValue(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') handleSaveNote(item);
+                                  if (e.key === 'Escape') handleCancelEdit();
+                                }}
+                                autoFocus
+                                placeholder="Tulis catatan (e.g. less ice, gula pisah)..."
+                                className="flex-1 px-3 py-1.5 rounded-xl bg-zinc-950 border border-zinc-700 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-white transition-colors"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleSaveNote(item)}
+                                className="px-2.5 py-1.5 rounded-xl bg-white text-black text-xs font-bold hover:bg-zinc-200 transition-colors flex items-center gap-1 shrink-0 shadow"
+                                title="Simpan Catatan"
+                              >
+                                <Check className="w-3 h-3" />
+                                <span>Simpan</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={handleCancelEdit}
+                                className="p-1.5 rounded-xl bg-zinc-800 text-zinc-400 hover:text-white transition-colors shrink-0"
+                                title="Batal"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+
+                            {/* Quick Preset Chips */}
+                            <div className="flex flex-wrap gap-1">
+                              {['Less ice', 'No sugar', 'Less sugar', 'Gula pisah', 'Hangat / Panas', 'Pedas'].map((preset) => (
+                                <button
+                                  key={preset}
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingNoteValue((prev) => {
+                                      const trimmed = prev.trim();
+                                      if (!trimmed) return preset;
+                                      if (trimmed.includes(preset)) return trimmed;
+                                      return `${trimmed}, ${preset}`;
+                                    });
+                                  }}
+                                  className="text-[9px] px-2 py-0.5 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-600 transition-colors"
+                                >
+                                  +{preset}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-between text-xs pt-0.5">
+                            {item.notes ? (
+                              <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                                <span className="text-[11px] text-zinc-300 italic bg-zinc-950/80 px-2 py-0.5 rounded-md border border-zinc-800/80 truncate max-w-[210px]">
+                                  * {item.notes}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => startEditingNote(item)}
+                                  className="text-[10px] text-zinc-400 hover:text-white flex items-center gap-1 transition-colors px-1.5 py-0.5 rounded hover:bg-zinc-800 shrink-0"
+                                  title="Ubah Catatan"
+                                >
+                                  <Pencil className="w-2.5 h-2.5" />
+                                  <span>Ubah</span>
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => startEditingNote(item)}
+                                className="text-[10px] text-zinc-400 hover:text-white flex items-center gap-1 transition-colors py-0.5 rounded hover:bg-zinc-900/80 px-1"
+                                title="Tambahkan catatan khusus untuk menu ini"
+                              >
+                                <Pencil className="w-2.5 h-2.5 text-zinc-400" />
+                                <span>+ Tambah Catatan</span>
+                              </button>
+                            )}
+                          </div>
                         )}
                       </div>
-
-                      {/* Qty changer */}
-                      <div className="flex items-center gap-2 bg-zinc-950 border border-zinc-800 rounded-xl p-1 shrink-0">
-                        <button
-                          onClick={() => onUpdateQuantity(item.id, item.notes, item.quantity - 1)}
-                          className="p-1 rounded text-zinc-400 hover:text-white transition-colors"
-                        >
-                          <Minus className="w-3.5 h-3.5" />
-                        </button>
-                        <span className="font-mono text-xs font-bold text-white w-4 text-center">
-                          {item.quantity}
-                        </span>
-                        <button
-                          onClick={() => onUpdateQuantity(item.id, item.notes, item.quantity + 1)}
-                          className="p-1 rounded text-zinc-400 hover:text-white transition-colors"
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-
-                      <button
-                        onClick={() => onRemoveItem(item.id, item.notes)}
-                        className="p-1.5 rounded-lg text-zinc-500 hover:text-white hover:bg-zinc-800 transition-colors"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
 
                 {/* Customer Details Form */}

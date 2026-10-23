@@ -293,6 +293,36 @@ export default function CustomerView({ onSwitchToAdmin }) {
     );
   };
 
+  const handleUpdateItemNotes = (itemId, oldNotes, newNotes) => {
+    setCart((prev) => {
+      const itemIndex = prev.findIndex(
+        (i) => i.id === itemId && (i.notes || '') === (oldNotes || '')
+      );
+      if (itemIndex === -1) return prev;
+
+      const trimmedNewNotes = (newNotes || '').trim();
+      if (trimmedNewNotes === (oldNotes || '').trim()) return prev;
+
+      // Check if an item with the same id and the same new notes already exists
+      const existingWithNewNotesIndex = prev.findIndex(
+        (i, idx) => idx !== itemIndex && i.id === itemId && (i.notes || '') === trimmedNewNotes
+      );
+
+      if (existingWithNewNotesIndex > -1) {
+        // Merge quantities together and remove current item
+        const copy = [...prev];
+        copy[existingWithNewNotesIndex].quantity += copy[itemIndex].quantity;
+        copy.splice(itemIndex, 1);
+        return copy;
+      } else {
+        // Update notes on current item
+        const copy = [...prev];
+        copy[itemIndex] = { ...copy[itemIndex], notes: trimmedNewNotes };
+        return copy;
+      }
+    });
+  };
+
   // Submit Order
   const handleSubmitOrder = async (orderPayload, paymentStatus = 'UNPAID') => {
     setIsSubmitting(true);
@@ -499,6 +529,7 @@ export default function CustomerView({ onSwitchToAdmin }) {
         setCustomerName={setCustomerName}
         onUpdateQuantity={handleUpdateQuantity}
         onRemoveItem={handleRemoveItem}
+        onUpdateNotes={handleUpdateItemNotes}
         onClearCart={() => setCart([])}
         onSubmitOrder={handleSubmitOrder}
         isSubmitting={isSubmitting}
