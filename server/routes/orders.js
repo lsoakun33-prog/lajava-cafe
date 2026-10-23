@@ -6,10 +6,17 @@ const db = require('../db');
 const { authenticateAdmin } = require('./auth');
 const { getIO } = require('../socket');
 
-// Rate limiter: max 12 order placements per minute per IP
+// Rate limiter: max 10 order placements per minute per device (prevents restaurant Wi-Fi NAT false blocks)
 const orderLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 12,
+  max: 10,
+  keyGenerator: (req) => {
+    return (
+      req.body?.deviceId ||
+      (req.headers['x-forwarded-for'] || req.socket.remoteAddress || req.ip || 'unknown').split(',')[0].trim()
+    );
+  },
+  validate: { xForwardedForHeader: false, default: false },
   standardHeaders: true,
   legacyHeaders: false,
   message: {

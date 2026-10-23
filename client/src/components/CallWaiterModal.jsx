@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { X, Bell, CheckCircle2, Utensils, Receipt, Droplet, HelpCircle, Send } from 'lucide-react';
 import { api } from '../api';
-import { emitCallWaiter } from '../socket';
 
 const CALL_TYPES = [
   { id: 'BANTUAN', label: 'Panggil Kasir / Bantuan', icon: HelpCircle, desc: 'Perlu bantuan pelayan ke meja' },
@@ -21,10 +20,8 @@ export default function CallWaiterModal({ isOpen, onClose, tableNumber }) {
   const handleSendCall = async () => {
     setIsLoading(true);
     try {
-      // 1. Emit via websocket for instant response
-      emitCallWaiter(tableNumber, selectedType, customNote);
-      // 2. Persist to API
-      await api.callWaiter(tableNumber, selectedType, customNote).catch(() => {});
+      // Persist to API (which creates DB record and notifies admin via Socket.IO)
+      await api.callWaiter(tableNumber, selectedType, customNote);
 
       setIsSent(true);
       setTimeout(() => {
