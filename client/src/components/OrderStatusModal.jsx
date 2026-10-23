@@ -32,7 +32,16 @@ function getStepIndex(status) {
   return 0;
 }
 
-export default function OrderStatusModal({ order: initialOrder, isOpen, onClose, onViewReceipt, onOrderUpdated, onCustomerConfirm, autoCloseDeadline }) {
+export default function OrderStatusModal({
+  order: initialOrder,
+  isOpen,
+  onClose,
+  onViewReceipt,
+  onOrderUpdated,
+  onCustomerConfirm,
+  onDismissCancelled,
+  autoCloseDeadline,
+}) {
   const [order, setOrder] = useState(initialOrder);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [hasShownCompletedConfetti, setHasShownCompletedConfetti] = useState(false);
@@ -164,9 +173,24 @@ export default function OrderStatusModal({ order: initialOrder, isOpen, onClose,
   const isCompleted = order.status === 'COMPLETED';
   const activeIndex = getStepIndex(order.status);
 
+  // When order is CANCELLED or COMPLETED, closing the modal dismisses the active order completely
+  const handleClose = () => {
+    if (isCancelled) {
+      if (onDismissCancelled) {
+        onDismissCancelled();
+        return;
+      }
+      if (onCustomerConfirm) {
+        onCustomerConfirm();
+        return;
+      }
+    }
+    onClose();
+  };
+
   return (
     <div
-      onClick={onClose}
+      onClick={handleClose}
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md"
     >
       <div
@@ -200,7 +224,7 @@ export default function OrderStatusModal({ order: initialOrder, isOpen, onClose,
               <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
             </button>
             <button
-              onClick={onClose}
+              onClick={handleClose}
               className="p-2 rounded-xl text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
             >
               <X className="w-5 h-5" />
@@ -385,14 +409,14 @@ export default function OrderStatusModal({ order: initialOrder, isOpen, onClose,
           {isCompleted ? (
             /* Customer confirms done → immediate clear of active order */
             <button
-              onClick={onCustomerConfirm || onClose}
+              onClick={onCustomerConfirm || handleClose}
               className="flex-1 py-3 px-4 rounded-xl bg-white text-black font-semibold text-xs tracking-wider uppercase hover:bg-zinc-200 transition-colors"
             >
               Selesai ✓
             </button>
           ) : (
             <button
-              onClick={onClose}
+              onClick={handleClose}
               className="flex-1 py-3 px-4 rounded-xl bg-white text-black font-semibold text-xs tracking-wider uppercase hover:bg-zinc-200 transition-colors"
             >
               Tutup

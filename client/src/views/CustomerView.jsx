@@ -656,6 +656,7 @@ export default function CustomerView({ onSwitchToAdmin }) {
         }}
         onOrderUpdated={handleOrderUpdated}
         onCustomerConfirm={handleCustomerConfirmDone}
+        onDismissCancelled={handleCustomerConfirmDone}
         autoCloseDeadline={autoCloseDeadline}
       />
 
