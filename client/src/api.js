@@ -149,6 +149,13 @@ export const api = {
     });
   },
 
+  async getMyOrders(deviceId, tableNumber) {
+    const params = new URLSearchParams();
+    if (deviceId) params.append('deviceId', deviceId);
+    if (tableNumber) params.append('tableNumber', tableNumber);
+    return request(`/orders/my-orders?${params.toString()}`);
+  },
+
   async getOrders(params = {}) {
     const query = new URLSearchParams(params).toString();
     return request(`/orders${query ? `?${query}` : ''}`);

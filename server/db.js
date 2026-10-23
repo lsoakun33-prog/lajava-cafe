@@ -99,6 +99,21 @@ function initDatabase() {
   try {
     db.prepare('ALTER TABLE menu_items ADD COLUMN stock INTEGER DEFAULT NULL').run();
   } catch (_) {}
+  try {
+    db.prepare('ALTER TABLE orders ADD COLUMN device_id TEXT').run();
+  } catch (_) {}
+  try {
+    db.prepare('ALTER TABLE orders ADD COLUMN ip_address TEXT').run();
+  } catch (_) {}
+  try {
+    db.prepare('ALTER TABLE orders ADD COLUMN user_agent TEXT').run();
+  } catch (_) {}
+  try {
+    db.prepare('CREATE INDEX IF NOT EXISTS idx_orders_device_id ON orders(device_id)').run();
+  } catch (_) {}
+  try {
+    db.prepare('CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at)').run();
+  } catch (_) {}
 
   seedInitialData();
 }

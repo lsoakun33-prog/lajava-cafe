@@ -54,7 +54,12 @@ function generateOrderNumber() {
 // POST /api/orders - Customer places an order (Rate limited & stock verified)
 router.post('/', orderLimiter, (req, res) => {
   try {
-    const { tableNumber, customerName, customerNotes, paymentMethod, items, tableToken } = req.body;
+    const { tableNumber, customerName, customerNotes, paymentMethod, items, tableToken, deviceId } = req.body;
+
+    const clientIp = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || req.ip || '')
+      .split(',')[0]
+      .trim();
+    const userAgent = (req.headers['user-agent'] || '').slice(0, 255);
 
     if (!tableNumber || !customerName || !items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ success: false, message: 'Data meja, nama pemesan, dan menu wajib diisi' });
@@ -123,8 +128,9 @@ router.post('/', orderLimiter, (req, res) => {
       const insertOrderStmt = db.prepare(`
         INSERT INTO orders (
           id, order_number, table_number, customer_name, customer_notes, 
-          status, payment_method, payment_status, subtotal, tax, total_amount, table_token
-        ) VALUES (?, ?, ?, ?, ?, 'PENDING', ?, 'UNPAID', ?, ?, ?, ?)
+          status, payment_method, payment_status, subtotal, tax, total_amount, table_token,
+          device_id, ip_address, user_agent
+        ) VALUES (?, ?, ?, ?, ?, 'PENDING', ?, 'UNPAID', ?, ?, ?, ?, ?, ?, ?)
       `);
 
       insertOrderStmt.run(
@@ -137,7 +143,10 @@ router.post('/', orderLimiter, (req, res) => {
         subtotal,
         tax,
         totalAmount,
-        tableToken || null
+        tableToken || null,
+        deviceId || null,
+        clientIp || null,
+        userAgent || null
       );
 
       const insertOrderItemStmt = db.prepare(`
@@ -183,11 +192,14 @@ router.post('/', orderLimiter, (req, res) => {
     rawOrder.items = validatedItems;
     const createdOrder = normalizeOrder(rawOrder);
 
-    // Real-time broadcast to Admin Kitchen & Cashier!
+    // Real-time broadcast to Admin Kitchen & Cashier, and strictly to this device & order
     try {
       const io = getIO();
       io.to('admin:room').emit('order:new', createdOrder);
-      io.to(`table:${tableNumber}`).emit('order:created', createdOrder);
+      io.to(`order:${orderId}`).emit('order:created', createdOrder);
+      if (deviceId) {
+        io.to(`device:${deviceId}`).emit('order:created', createdOrder);
+      }
     } catch (e) {
       console.warn('[Socket Error]', e.message);
     }
@@ -227,6 +239,53 @@ router.get('/', authenticateAdmin, (req, res) => {
 
     return res.json({ success: true, data: fullOrders });
   } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// GET /api/orders/my-orders - Customer retrieves today's orders for their device
+router.get('/my-orders', (req, res) => {
+  try {
+    const { deviceId, tableNumber } = req.query;
+    const clientIp = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || req.ip || '')
+      .split(',')[0]
+      .trim();
+
+    if (!deviceId && !clientIp) {
+      return res.json({ success: true, data: [] });
+    }
+
+    // Query orders that belong to this device or IP, created today (or within the last 18 hours)
+    let query = `
+      SELECT * FROM orders
+      WHERE (
+        (device_id IS NOT NULL AND device_id = ?)
+        OR (device_id IS NULL AND ip_address = ?)
+      )
+      AND (
+        date(created_at, 'localtime') = date('now', 'localtime')
+        OR created_at >= datetime('now', '-18 hours')
+      )
+    `;
+    const params = [deviceId || '', clientIp || ''];
+
+    if (tableNumber) {
+      query += ' AND table_number = ?';
+      params.push(tableNumber);
+    }
+
+    query += ' ORDER BY created_at DESC LIMIT 30';
+
+    const orders = db.prepare(query).all(...params);
+
+    const getItemsStmt = db.prepare('SELECT * FROM order_items WHERE order_id = ?');
+    const fullOrders = orders.map((ord) =>
+      normalizeOrder({ ...ord, items: getItemsStmt.all(ord.id) })
+    );
+
+    return res.json({ success: true, data: fullOrders });
+  } catch (err) {
+    console.error('Error fetching my-orders:', err);
     return res.status(500).json({ success: false, message: err.message });
   }
 });
@@ -304,7 +363,9 @@ router.patch('/:id/status', authenticateAdmin, (req, res) => {
     try {
       const io = getIO();
       io.to(`order:${id}`).emit('order:status_updated', updatedOrder);
-      io.to(`table:${order.table_number}`).emit('order:status_updated', updatedOrder);
+      if (updatedOrder.device_id) {
+        io.to(`device:${updatedOrder.device_id}`).emit('order:status_updated', updatedOrder);
+      }
       io.to('admin:room').emit('order:status_updated', updatedOrder);
     } catch (e) {
       console.warn('[Socket Error]', e.message);
@@ -384,6 +445,9 @@ router.patch('/:id/payment', (req, res) => {
     try {
       const io = getIO();
       io.to(`order:${id}`).emit('order:payment_updated', updated);
+      if (updated.device_id) {
+        io.to(`device:${updated.device_id}`).emit('order:payment_updated', updated);
+      }
       io.to('admin:room').emit('order:payment_updated', updated);
     } catch (_) {}
 

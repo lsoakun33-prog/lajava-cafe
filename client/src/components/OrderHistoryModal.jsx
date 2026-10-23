@@ -1,8 +1,16 @@
 import React from 'react';
-import { X, History, Receipt, Clock, CheckCircle2, ChefHat, Bell, XCircle } from 'lucide-react';
+import { X, History, Receipt, Clock, CheckCircle2, ChefHat, Bell, XCircle, RefreshCw } from 'lucide-react';
 import { formatRupiah, formatTimeAgo } from '../utils/format';
 
-export default function OrderHistoryModal({ isOpen, onClose, orders = [], onViewReceipt, onViewStatus }) {
+export default function OrderHistoryModal({
+  isOpen,
+  onClose,
+  orders = [],
+  onViewReceipt,
+  onViewStatus,
+  onRefresh,
+  isRefreshing = false,
+}) {
   if (!isOpen) return null;
 
   const getStatusBadge = (status) => {
@@ -58,16 +66,28 @@ export default function OrderHistoryModal({ isOpen, onClose, orders = [], onView
               <History className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-white tracking-wide">Riwayat Pesanan Meja</h3>
-              <p className="text-[11px] text-zinc-400">{orders.length} pesanan tercatat sesi ini</p>
+              <h3 className="text-sm font-bold text-white tracking-wide">Riwayat Pesanan (Sesi Ini)</h3>
+              <p className="text-[11px] text-zinc-400">{orders.length} pesanan di perangkat ini</p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
-          >
-            <X className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-1.5">
+            {onRefresh && (
+              <button
+                onClick={onRefresh}
+                disabled={isRefreshing}
+                className="p-1.5 rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors disabled:opacity-50"
+                title="Perbarui riwayat pesanan"
+              >
+                <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-white' : ''}`} />
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         {/* Orders list */}

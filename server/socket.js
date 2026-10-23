@@ -12,13 +12,17 @@ function initSocket(serverInstance) {
   });
 
   io.on('connection', (socket) => {
-    // Client joins table room or order room
+    // Client joins table room, order room, or device room
     socket.on('join:table', (tableNumber) => {
       if (tableNumber) socket.join(`table:${tableNumber}`);
     });
 
     socket.on('join:order', (orderId) => {
       if (orderId) socket.join(`order:${orderId}`);
+    });
+
+    socket.on('join:device', (deviceId) => {
+      if (deviceId) socket.join(`device:${deviceId}`);
     });
 
     // SECURE ADMIN ROOM: Verified by JWT

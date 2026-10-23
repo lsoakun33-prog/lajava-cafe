@@ -21,6 +21,12 @@ export function joinOrderRoom(orderId) {
   }
 }
 
+export function joinDeviceRoom(deviceId) {
+  if (deviceId) {
+    socket.emit('join:device', deviceId);
+  }
+}
+
 export function joinAdminRoom(token) {
   const adminToken = token || localStorage.getItem('noir_admin_token');
   if (adminToken) {

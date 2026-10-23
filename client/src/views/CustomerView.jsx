@@ -11,10 +11,40 @@ import ReceiptModal from '../components/ReceiptModal';
 import CallWaiterModal from '../components/CallWaiterModal';
 import OrderHistoryModal from '../components/OrderHistoryModal';
 import { api } from '../api';
-import { socket, joinTableRoom, joinOrderRoom } from '../socket';
+import { socket, joinTableRoom, joinOrderRoom, joinDeviceRoom } from '../socket';
 import { formatRupiah } from '../utils/format';
 
+function getOrCreateDeviceId() {
+  try {
+    let id = localStorage.getItem('noir_device_id');
+    if (!id) {
+      id = (typeof crypto !== 'undefined' && crypto.randomUUID)
+        ? crypto.randomUUID()
+        : 'dev_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+      localStorage.setItem('noir_device_id', id);
+    }
+    return id;
+  } catch {
+    return 'dev_fallback_' + Date.now();
+  }
+}
+
+function isOrderFromToday(order) {
+  if (!order || !order.created_at) return false;
+  try {
+    const orderDate = new Date(order.created_at);
+    const now = new Date();
+    const diffHours = (now - orderDate) / (1000 * 60 * 60);
+    return diffHours < 18 || orderDate.toDateString() === now.toDateString();
+  } catch {
+    return false;
+  }
+}
+
 export default function CustomerView({ onSwitchToAdmin }) {
+  // Persistent Unique Device ID for customer device-level isolation
+  const [deviceId] = useState(() => getOrCreateDeviceId());
+
   // Table state (parsed from ?table= URL query or saved in localStorage)
   const [tableNumber, setTableNumber] = useState(() => {
     const params = new URLSearchParams(window.location.search);
@@ -60,25 +90,37 @@ export default function CustomerView({ onSwitchToAdmin }) {
     }
   });
 
-  // Active / Last placed order
+  // Active / Last placed order (only keep if placed today)
   const [activeOrder, setActiveOrder] = useState(() => {
     try {
       const saved = localStorage.getItem('noir_active_order');
-      return saved ? JSON.parse(saved) : null;
+      if (!saved) return null;
+      const parsed = JSON.parse(saved);
+      if (!isOrderFromToday(parsed)) {
+        localStorage.removeItem('noir_active_order');
+        return null;
+      }
+      return parsed;
     } catch {
       return null;
     }
   });
 
-  // Session Order History
+  // Session Order History (filtered to today's orders on this device)
   const [orderHistory, setOrderHistory] = useState(() => {
     try {
       const saved = localStorage.getItem('noir_order_history');
-      return saved ? JSON.parse(saved) : [];
+      if (!saved) return [];
+      const parsed = JSON.parse(saved);
+      const freshOnly = Array.isArray(parsed) ? parsed.filter(isOrderFromToday) : [];
+      localStorage.setItem('noir_order_history', JSON.stringify(freshOnly));
+      return freshOnly;
     } catch {
       return [];
     }
   });
+
+  const [isRefreshingHistory, setIsRefreshingHistory] = useState(false);
 
   // Modals state
   const [selectedItemForModal, setSelectedItemForModal] = useState(null);
@@ -100,6 +142,13 @@ export default function CustomerView({ onSwitchToAdmin }) {
     localStorage.setItem('noir_cart', JSON.stringify(cart));
   }, [cart]);
 
+  // Join device room & table room
+  useEffect(() => {
+    if (deviceId) {
+      joinDeviceRoom(deviceId);
+    }
+  }, [deviceId]);
+
   // Persist table
   useEffect(() => {
     localStorage.setItem('noir_customer_table', tableNumber);
@@ -119,9 +168,13 @@ export default function CustomerView({ onSwitchToAdmin }) {
     });
   }, []);
 
-  // Online / Offline listener
+  // Online / Offline listener & auto re-join rooms on reconnect
   useEffect(() => {
-    const onConnect = () => setIsOnline(true);
+    const onConnect = () => {
+      setIsOnline(true);
+      if (deviceId) joinDeviceRoom(deviceId);
+      if (tableNumber) joinTableRoom(tableNumber);
+    };
     const onDisconnect = () => setIsOnline(false);
     socket.on('connect', onConnect);
     socket.on('disconnect', onDisconnect);
@@ -129,7 +182,7 @@ export default function CustomerView({ onSwitchToAdmin }) {
       socket.off('connect', onConnect);
       socket.off('disconnect', onDisconnect);
     };
-  }, []);
+  }, [deviceId, tableNumber]);
 
   // ─── Customer clicks "Selesai ✓" → clear IMMEDIATELY ────────────────────────
   const handleCustomerConfirmDone = useCallback(() => {
@@ -162,9 +215,37 @@ export default function CustomerView({ onSwitchToAdmin }) {
     }, 5 * 60 * 1000);
   }, []);
 
+  // Sync orders for this device from server
+  const syncDeviceOrders = useCallback(async () => {
+    if (!deviceId) return;
+    try {
+      setIsRefreshingHistory(true);
+      const res = await api.getMyOrders(deviceId, tableNumber);
+      if (res && res.success && Array.isArray(res.data)) {
+        setOrderHistory(res.data);
+        localStorage.setItem('noir_order_history', JSON.stringify(res.data));
+
+        // If there's an ongoing (uncompleted) order, ensure activeOrder is tracking it
+        const currentOngoing = res.data.find(
+          (o) => o.status !== 'COMPLETED' && o.status !== 'CANCELLED'
+        );
+        if (currentOngoing) {
+          setActiveOrder(currentOngoing);
+          localStorage.setItem('noir_active_order', JSON.stringify(currentOngoing));
+          joinOrderRoom(currentOngoing.id);
+        }
+      }
+    } catch (err) {
+      console.warn('[Sync Orders] Failed to fetch device orders:', err.message);
+    } finally {
+      setIsRefreshingHistory(false);
+    }
+  }, [deviceId, tableNumber]);
+
   // Fetch initial data
   useEffect(() => {
     loadData();
+    syncDeviceOrders();
 
     // Re-join order room if there's an existing active order (e.g. after page refresh)
     const savedOrder = (() => {
@@ -214,22 +295,49 @@ export default function CustomerView({ onSwitchToAdmin }) {
         }
         return prev;
       });
+
+      // Update in order history
+      setOrderHistory((prev) => {
+        if (!prev.some((o) => o.id === updatedOrder.id)) return prev;
+        const next = prev.map((o) => (o.id === updatedOrder.id ? updatedOrder : o));
+        localStorage.setItem('noir_order_history', JSON.stringify(next));
+        return next;
+      });
+    };
+
+    const handleOrderPaymentUpdate = (updatedOrder) => {
+      setActiveOrder((prev) => {
+        if (prev && updatedOrder.id === prev.id) {
+          localStorage.setItem('noir_active_order', JSON.stringify(updatedOrder));
+          return updatedOrder;
+        }
+        return prev;
+      });
+
+      setOrderHistory((prev) => {
+        if (!prev.some((o) => o.id === updatedOrder.id)) return prev;
+        const next = prev.map((o) => (o.id === updatedOrder.id ? updatedOrder : o));
+        localStorage.setItem('noir_order_history', JSON.stringify(next));
+        return next;
+      });
     };
 
     socket.on('menu:availability_changed', handleAvailability);
     socket.on('menu:updated', handleMenuUpdate);
     socket.on('menu:deleted', handleMenuDelete);
     socket.on('order:status_updated', handleOrderStatusUpdate);
+    socket.on('order:payment_updated', handleOrderPaymentUpdate);
 
     return () => {
       socket.off('menu:availability_changed', handleAvailability);
       socket.off('menu:updated', handleMenuUpdate);
       socket.off('menu:deleted', handleMenuDelete);
       socket.off('order:status_updated', handleOrderStatusUpdate);
+      socket.off('order:payment_updated', handleOrderPaymentUpdate);
       // Clean up timer on unmount
       if (autoCloseTimerRef.current) clearTimeout(autoCloseTimerRef.current);
     };
-  }, [startAdminAutoCloseTimer]);
+  }, [startAdminAutoCloseTimer, syncDeviceOrders]);
 
 
 
@@ -333,6 +441,7 @@ export default function CustomerView({ onSwitchToAdmin }) {
       const payloadWithToken = {
         ...orderPayload,
         tableToken: tableToken || undefined,
+        deviceId,
       };
 
       const res = await api.createOrder(payloadWithToken);
@@ -415,7 +524,10 @@ export default function CustomerView({ onSwitchToAdmin }) {
         hasActiveOrder={!!activeOrder}
         onSwitchToAdmin={onSwitchToAdmin}
         onOpenCallWaiter={() => setIsCallWaiterOpen(true)}
-        onOpenPastOrders={() => setIsOrderHistoryOpen(true)}
+        onOpenPastOrders={() => {
+          syncDeviceOrders();
+          setIsOrderHistoryOpen(true);
+        }}
         pastOrdersCount={orderHistory.length}
       />
 
@@ -571,6 +683,8 @@ export default function CustomerView({ onSwitchToAdmin }) {
         isOpen={isOrderHistoryOpen}
         onClose={() => setIsOrderHistoryOpen(false)}
         orders={orderHistory}
+        onRefresh={syncDeviceOrders}
+        isRefreshing={isRefreshingHistory}
         onViewReceipt={(order) => setReceiptOrder(order)}
         onViewStatus={(order) => {
           setActiveOrder(order);
