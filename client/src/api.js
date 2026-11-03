@@ -200,8 +200,8 @@ export const api = {
     });
   },
 
-  async getStats() {
-    return request('/orders/stats/summary');
+  async getStats(period = 'today') {
+    return request(`/orders/stats/summary?period=${encodeURIComponent(period)}`);
   },
 
   async downloadOrdersCsv() {

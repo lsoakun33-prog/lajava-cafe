@@ -29,17 +29,26 @@ export default function ZReportModal({ isOpen, onClose, stats, orders = [] }) {
     topItems = [],
   } = stats;
 
-  // Breakdown payment methods for completed orders
-  const paidQris = orders
-    .filter((o) => o.payment_method === 'QRIS' && o.payment_status === 'PAID')
-    .reduce((sum, o) => sum + o.total_amount, 0);
+  // Breakdown payment methods for completed orders (prefer direct DB stats, fallback to loaded orders)
+  const paidQris = stats.paidQris !== undefined
+    ? stats.paidQris
+    : orders
+        .filter((o) => o.payment_method === 'QRIS' && o.payment_status === 'PAID')
+        .reduce((sum, o) => sum + o.total_amount, 0);
 
-  const paidCash = orders
-    .filter((o) => o.payment_method === 'CASHIER' && o.payment_status === 'PAID')
-    .reduce((sum, o) => sum + o.total_amount, 0);
+  const paidCash = stats.paidCash !== undefined
+    ? stats.paidCash
+    : orders
+        .filter((o) => o.payment_method === 'CASHIER' && o.payment_status === 'PAID')
+        .reduce((sum, o) => sum + o.total_amount, 0);
 
-  const unpaidCount = orders.filter((o) => o.payment_status === 'UNPAID' && o.status !== 'CANCELLED').length;
-  const cancelledCount = orders.filter((o) => o.status === 'CANCELLED').length;
+  const unpaidCount = stats.unpaidCount !== undefined
+    ? stats.unpaidCount
+    : orders.filter((o) => o.payment_status === 'UNPAID' && o.status !== 'CANCELLED').length;
+
+  const cancelledCount = stats.cancelledCount !== undefined
+    ? stats.cancelledCount
+    : orders.filter((o) => o.status === 'CANCELLED').length;
 
   const handlePrint = () => {
     window.print();

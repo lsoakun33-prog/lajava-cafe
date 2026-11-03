@@ -464,53 +464,141 @@ router.patch('/:id/payment', authenticateAdmin, (req, res) => {
   }
 });
 
-// GET /api/orders/stats/summary - Admin Dashboard Analytics
+// GET /api/orders/stats/summary - Admin Dashboard Analytics (WIB Reset at 24:00 midnight)
 router.get('/stats/summary', authenticateAdmin, (req, res) => {
   try {
-    const today = new Date().toISOString().slice(0, 10);
+    const period = (req.query.period || 'today').toLowerCase(); // 'today' (default) or 'all'
+    const isToday = period === 'today';
 
-    const totalRevenue = db.prepare(`
-      SELECT COALESCE(SUM(total_amount), 0) as total 
-      FROM orders 
-      WHERE status != 'CANCELLED'
-    `).get().total;
+    // Calculate current date in Asia/Jakarta timezone (WIB = UTC+7)
+    // Ensures reset happens exactly at 24:00 (00:00:00 WIB)
+    const nowWib = new Date(Date.now() + 7 * 60 * 60 * 1000);
+    const todayWib = nowWib.toISOString().slice(0, 10); // "YYYY-MM-DD"
 
+    // 1. Revenue
+    let totalRevenue = 0;
+    if (isToday) {
+      totalRevenue = db.prepare(`
+        SELECT COALESCE(SUM(total_amount), 0) as total 
+        FROM orders 
+        WHERE status != 'CANCELLED'
+          AND date(datetime(created_at, '+7 hours')) = ?
+      `).get(todayWib).total;
+    } else {
+      totalRevenue = db.prepare(`
+        SELECT COALESCE(SUM(total_amount), 0) as total 
+        FROM orders 
+        WHERE status != 'CANCELLED'
+      `).get().total;
+    }
+
+    // 2. Orders count today vs all
     const todayOrdersCount = db.prepare(`
       SELECT COUNT(*) as count 
       FROM orders 
-      WHERE date(created_at) = date('now', 'localtime')
+      WHERE date(datetime(created_at, '+7 hours')) = ?
+    `).get(todayWib).count;
+
+    const allOrdersCount = db.prepare(`
+      SELECT COUNT(*) as count 
+      FROM orders
     `).get().count;
 
+    const displayedOrdersCount = isToday ? todayOrdersCount : allOrdersCount;
+
+    // 3. Active orders (currently in progress right now)
     const activeOrdersCount = db.prepare(`
       SELECT COUNT(*) as count 
       FROM orders 
       WHERE status IN ('PENDING', 'CONFIRMED', 'PREPARING', 'READY')
     `).get().count;
 
-    const completedOrdersCount = db.prepare(`
-      SELECT COUNT(*) as count 
-      FROM orders 
-      WHERE status = 'COMPLETED'
-    `).get().count;
+    // 4. Completed orders
+    let completedOrdersCount = 0;
+    if (isToday) {
+      completedOrdersCount = db.prepare(`
+        SELECT COUNT(*) as count 
+        FROM orders 
+        WHERE status = 'COMPLETED'
+          AND date(datetime(created_at, '+7 hours')) = ?
+      `).get(todayWib).count;
+    } else {
+      completedOrdersCount = db.prepare(`
+        SELECT COUNT(*) as count 
+        FROM orders 
+        WHERE status = 'COMPLETED'
+      `).get().count;
+    }
 
-    const topItems = db.prepare(`
-      SELECT item_name, SUM(quantity) as total_sold, SUM(item_price * quantity) as total_revenue
-      FROM order_items oi
-      JOIN orders o ON oi.order_id = o.id
-      WHERE o.status != 'CANCELLED'
-      GROUP BY item_name
-      ORDER BY total_sold DESC
-      LIMIT 5
-    `).all();
+    // 5. Top 5 Menu Items (Daily leaderboard or all-time)
+    let topItems = [];
+    if (isToday) {
+      topItems = db.prepare(`
+        SELECT oi.item_name, SUM(oi.quantity) as total_sold, SUM(oi.item_price * oi.quantity) as total_revenue
+        FROM order_items oi
+        JOIN orders o ON oi.order_id = o.id
+        WHERE o.status != 'CANCELLED'
+          AND date(datetime(o.created_at, '+7 hours')) = ?
+        GROUP BY oi.item_name
+        ORDER BY total_sold DESC
+        LIMIT 5
+      `).all(todayWib);
+    } else {
+      topItems = db.prepare(`
+        SELECT oi.item_name, SUM(oi.quantity) as total_sold, SUM(oi.item_price * oi.quantity) as total_revenue
+        FROM order_items oi
+        JOIN orders o ON oi.order_id = o.id
+        WHERE o.status != 'CANCELLED'
+        GROUP BY oi.item_name
+        ORDER BY total_sold DESC
+        LIMIT 5
+      `).all();
+    }
+
+    // 6. Payment breakdown (for Z-Report and financial auditing)
+    const paymentBreakdown = isToday
+      ? db.prepare(`
+          SELECT 
+            COALESCE(SUM(CASE WHEN payment_method = 'QRIS' AND payment_status = 'PAID' AND status != 'CANCELLED' THEN total_amount ELSE 0 END), 0) as paidQris,
+            COALESCE(SUM(CASE WHEN payment_method = 'CASHIER' AND payment_status = 'PAID' AND status != 'CANCELLED' THEN total_amount ELSE 0 END), 0) as paidCash,
+            COUNT(CASE WHEN payment_status = 'UNPAID' AND status != 'CANCELLED' THEN 1 END) as unpaidCount,
+            COUNT(CASE WHEN status = 'CANCELLED' THEN 1 END) as cancelledCount
+          FROM orders
+          WHERE date(datetime(created_at, '+7 hours')) = ?
+        `).get(todayWib)
+      : db.prepare(`
+          SELECT 
+            COALESCE(SUM(CASE WHEN payment_method = 'QRIS' AND payment_status = 'PAID' AND status != 'CANCELLED' THEN total_amount ELSE 0 END), 0) as paidQris,
+            COALESCE(SUM(CASE WHEN payment_method = 'CASHIER' AND payment_status = 'PAID' AND status != 'CANCELLED' THEN total_amount ELSE 0 END), 0) as paidCash,
+            COUNT(CASE WHEN payment_status = 'UNPAID' AND status != 'CANCELLED' THEN 1 END) as unpaidCount,
+            COUNT(CASE WHEN status = 'CANCELLED' THEN 1 END) as cancelledCount
+          FROM orders
+        `).get();
+
+    // All-time revenue kept for reference
+    const allTimeRevenue = db.prepare(`
+      SELECT COALESCE(SUM(total_amount), 0) as total 
+      FROM orders 
+      WHERE status != 'CANCELLED'
+    `).get().total;
 
     return res.json({
       success: true,
       data: {
+        period,
+        timezone: 'WIB (UTC+7)',
+        currentDateWib: todayWib,
         totalRevenue,
+        allTimeRevenue,
         todayOrdersCount,
+        displayedOrdersCount,
         activeOrdersCount,
         completedOrdersCount,
         topItems,
+        paidQris: paymentBreakdown.paidQris,
+        paidCash: paymentBreakdown.paidCash,
+        unpaidCount: paymentBreakdown.unpaidCount,
+        cancelledCount: paymentBreakdown.cancelledCount,
       },
     });
   } catch (err) {
