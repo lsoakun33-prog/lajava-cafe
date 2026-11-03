@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Image as ImageIcon, Sparkles } from 'lucide-react';
+import MenuInitialVisual from '../MenuInitialVisual';
 
 const PRESET_IMAGES = [
   { label: 'Espresso', url: 'https://images.unsplash.com/photo-1510707577719-ae7c14805e3a?w=600&auto=format&fit=crop&q=80' },
@@ -50,7 +51,7 @@ export default function MenuItemFormModal({
         prep_time: 15,
         stock: '',
         description: '',
-        image: PRESET_IMAGES[0].url,
+        image: '',
       });
     }
     setError('');
@@ -70,7 +71,7 @@ export default function MenuItemFormModal({
       price: Number(formData.price),
       prep_time: Number(formData.prep_time) || 15,
       stock: formData.stock === '' || formData.stock === null ? null : Number(formData.stock),
-      image: formData.image || PRESET_IMAGES[0].url,
+      image: formData.image || '',
     });
   };
 
@@ -234,8 +235,8 @@ export default function MenuItemFormModal({
             </div>
 
             {/* Preview */}
-            {formData.image && (
-              <div className="mt-2 w-full h-24 rounded-xl overflow-hidden border border-zinc-800 bg-zinc-900">
+            <div className="mt-2 w-full h-24 rounded-xl overflow-hidden border border-zinc-800 bg-zinc-900">
+              {formData.image ? (
                 <img
                   src={formData.image}
                   alt="Preview"
@@ -244,8 +245,17 @@ export default function MenuItemFormModal({
                     e.target.style.display = 'none';
                   }}
                 />
-              </div>
-            )}
+              ) : (
+                <MenuInitialVisual
+                  item={{
+                    name: formData.name || 'Menu Baru',
+                    category_id: formData.category_id,
+                  }}
+                  size="sm"
+                  className="w-full h-full"
+                />
+              )}
+            </div>
           </div>
 
           {/* Action Footer */}

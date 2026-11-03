@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Plus, Edit2, Trash2, Search, CheckCircle2, Ban, Clock } from 'lucide-react';
 import { formatRupiah } from '../../utils/format';
+import MenuInitialVisual from '../MenuInitialVisual';
 
 export default function MenuTab({
   menuItems = [],
@@ -94,14 +95,15 @@ export default function MenuTab({
             >
               <div className="flex gap-3">
                 <div className="w-20 h-20 rounded-xl overflow-hidden bg-zinc-900 shrink-0 border border-zinc-800">
-                  <img
-                    src={item.image}
-                    alt={item.name}
-                    className="w-full h-full object-cover filter contrast-105"
-                    onError={(e) => {
-                      e.target.src = 'https://images.unsplash.com/photo-1510707577719-ae7c14805e3a?w=600&auto=format&fit=crop&q=80';
-                    }}
-                  />
+                  {item.image ? (
+                    <img
+                      src={item.image}
+                      alt={item.name}
+                      className="w-full h-full object-cover filter contrast-105"
+                    />
+                  ) : (
+                    <MenuInitialVisual item={item} size="sm" className="w-full h-full" />
+                  )}
                 </div>
 
                 <div className="flex-1 min-w-0">

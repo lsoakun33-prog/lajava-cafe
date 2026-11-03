@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, Plus, Minus, Clock, Utensils } from 'lucide-react';
 import { formatRupiah } from '../utils/format';
+import MenuInitialVisual from './MenuInitialVisual';
 
 export default function ItemModal({ item, isOpen, onClose, onAddToCart }) {
   const [quantity, setQuantity] = useState(1);
@@ -35,24 +36,24 @@ export default function ItemModal({ item, isOpen, onClose, onAddToCart }) {
           <X className="w-5 h-5" />
         </button>
 
-        {/* Hero Image */}
-        <div className="relative w-full h-56 bg-zinc-900 overflow-hidden">
-          <img
-            src={item.image}
-            alt={item.name}
-            className="w-full h-full object-cover filter contrast-105"
-            onError={(e) => {
-              e.target.src = 'https://images.unsplash.com/photo-1510707577719-ae7c14805e3a?w=600&auto=format&fit=crop&q=80';
-            }}
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-transparent to-black/30" />
+        {/* Hero Visual */}
+        <div className="relative w-full h-56 sm:h-64 bg-zinc-900 overflow-hidden">
+          {item.image ? (
+            <img
+              src={item.image}
+              alt={item.name}
+              className="w-full h-full object-cover filter contrast-105"
+            />
+          ) : (
+            <MenuInitialVisual item={item} size="lg" className="w-full h-full" />
+          )}
           
-          <div className="absolute bottom-3 left-4 flex items-center gap-2">
+          <div className="absolute bottom-3 left-4 flex items-center gap-2 z-10">
             <span className="px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider uppercase bg-black/80 text-white border border-zinc-700 backdrop-blur-md flex items-center gap-1">
               <Clock className="w-3 h-3" />
               ~{item.prep_time || 15} Menit
             </span>
-            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider uppercase bg-white text-black">
+            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider uppercase bg-white text-black font-semibold">
               {item.category_name || 'Artisan F&B'}
             </span>
           </div>

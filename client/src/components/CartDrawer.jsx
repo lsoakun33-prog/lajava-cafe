@@ -6,15 +6,11 @@ import {
   Minus,
   ShoppingBag,
   ArrowRight,
-  CreditCard,
   Banknote,
-  QrCode,
   AlertCircle,
-  CheckCircle2,
   Pencil,
   Check,
 } from 'lucide-react';
-import { QRCodeSVG } from 'qrcode.react';
 import { formatRupiah } from '../utils/format';
 
 export default function CartDrawer({
@@ -32,8 +28,6 @@ export default function CartDrawer({
   isSubmitting,
 }) {
   const [customerNotes, setCustomerNotes] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState('CASHIER'); // 'CASHIER' | 'QRIS'
-  const [showQRISModal, setShowQRISModal] = useState(false);
   const [nameError, setNameError] = useState('');
 
   // Inline Note Editing State
@@ -70,12 +64,7 @@ export default function CartDrawer({
       return;
     }
     setNameError('');
-
-    if (paymentMethod === 'QRIS') {
-      setShowQRISModal(true);
-    } else {
-      executeOrderSubmission('UNPAID');
-    }
+    executeOrderSubmission('UNPAID');
   };
 
   const executeOrderSubmission = async (paymentStatus = 'UNPAID') => {
@@ -83,7 +72,7 @@ export default function CartDrawer({
       tableNumber,
       customerName: customerName.trim(),
       customerNotes: customerNotes.trim(),
-      paymentMethod,
+      paymentMethod: 'CASHIER',
       items: cart.map((item) => ({
         id: item.id,
         quantity: item.quantity,
@@ -91,7 +80,6 @@ export default function CartDrawer({
       })),
     };
 
-    setShowQRISModal(false);
     await onSubmitOrder(payload, paymentStatus);
   };
 
@@ -127,7 +115,9 @@ export default function CartDrawer({
             {cart.length === 0 ? (
               <div className="h-64 flex flex-col items-center justify-center text-center text-zinc-500 space-y-3">
                 <ShoppingBag className="w-12 h-12 stroke-[1.5]" />
-                <p className="text-xs">Keranjang Anda masih kosong.<br />Silakan pilih menu favorit Anda.</p>
+                <p className="text-xs">
+                  Keranjang Anda masih kosong.<br />Silakan pilih menu favorit Anda.
+                </p>
               </div>
             ) : (
               <>
@@ -308,47 +298,26 @@ export default function CartDrawer({
                     />
                   </div>
 
-                  {/* Payment Method Selector */}
+                  {/* Payment Method Info Card */}
                   <div className="pt-2">
                     <label className="text-xs font-semibold text-zinc-300 block mb-2">
-                      Pilihan Metode Pembayaran
+                      Metode Pembayaran
                     </label>
-                    <div className="grid grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setPaymentMethod('CASHIER')}
-                        className={`p-3 rounded-xl border text-left flex flex-col justify-between transition-all ${
-                          paymentMethod === 'CASHIER'
-                            ? 'bg-white text-black border-white shadow-lg'
-                            : 'bg-zinc-900 text-zinc-300 border-zinc-800 hover:border-zinc-700'
-                        }`}
-                      >
-                        <Banknote className="w-4 h-4 mb-2" />
-                        <div>
-                          <div className="text-xs font-bold">Bayar di Kasir</div>
-                          <div className={`text-[10px] ${paymentMethod === 'CASHIER' ? 'text-zinc-600' : 'text-zinc-500'}`}>
-                            Cash / Kartu Debit
-                          </div>
+                    <div className="p-3.5 rounded-2xl border border-zinc-800 bg-zinc-900/60 flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-white text-black flex items-center justify-center shrink-0 shadow-md">
+                        <Banknote className="w-5 h-5" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-bold text-white flex items-center gap-2">
+                          <span>Bayar di Kasir</span>
+                          <span className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-zinc-800 text-zinc-300 border border-zinc-700/80">
+                            Tunai / Debit / QRIS Kasir
+                          </span>
                         </div>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setPaymentMethod('QRIS')}
-                        className={`p-3 rounded-xl border text-left flex flex-col justify-between transition-all ${
-                          paymentMethod === 'QRIS'
-                            ? 'bg-white text-black border-white shadow-lg'
-                            : 'bg-zinc-900 text-zinc-300 border-zinc-800 hover:border-zinc-700'
-                        }`}
-                      >
-                        <QrCode className="w-4 h-4 mb-2" />
-                        <div>
-                          <div className="text-xs font-bold">QRIS Instant</div>
-                          <div className={`text-[10px] ${paymentMethod === 'QRIS' ? 'text-zinc-600' : 'text-zinc-500'}`}>
-                            Scan e-Wallet / BCA
-                          </div>
-                        </div>
-                      </button>
+                        <p className="text-[11px] text-zinc-400 mt-0.5">
+                          Pesanan langsung dikirim ke dapur. Pembayaran dapat diselesaikan langsung di meja kasir.
+                        </p>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -369,7 +338,7 @@ export default function CartDrawer({
                   <span className="font-mono">{formatRupiah(tax)}</span>
                 </div>
                 <div className="flex justify-between text-white font-bold text-sm pt-2 border-t border-zinc-800">
-                  <span>Total Pembayaran</span>
+                  <span>Total Tagihan</span>
                   <span className="font-mono text-base">{formatRupiah(total)}</span>
                 </div>
               </div>
@@ -392,61 +361,6 @@ export default function CartDrawer({
           )}
         </div>
       </div>
-
-      {/* QRIS Instant Modal Preview */}
-      {showQRISModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-fade-in">
-          <div className="relative w-full max-w-sm bg-zinc-950 border border-zinc-800 rounded-3xl p-6 text-center space-y-5 shadow-2xl">
-            <div className="flex justify-between items-center">
-              <span className="text-[10px] uppercase font-bold tracking-widest text-zinc-400">
-                Pembayaran Real-Time
-              </span>
-              <button
-                onClick={() => setShowQRISModal(false)}
-                className="p-1 rounded-full text-zinc-400 hover:text-white"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="space-y-1">
-              <h3 className="text-lg font-bold text-white tracking-wide">QRIS Standar Nasional</h3>
-              <p className="text-xs text-zinc-400">Scan via BCA, Mandiri, GoPay, OVO, Dana, ShopeePay</p>
-            </div>
-
-            {/* QR Code Container */}
-            <div className="p-4 bg-white rounded-2xl inline-block shadow-inner mx-auto">
-              <QRCodeSVG
-                value={`https://qris.noir-cafe.test/pay?amount=${total}&ref=ORD-${Date.now()}`}
-                size={200}
-                level="M"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <p className="text-xs text-zinc-400">Total Tagihan:</p>
-              <p className="text-xl font-bold font-mono text-white">{formatRupiah(total)}</p>
-            </div>
-
-            {/* Simulated instant confirmation buttons */}
-            <div className="space-y-2 pt-2">
-              <button
-                onClick={() => executeOrderSubmission('PAID')}
-                className="w-full py-3 px-4 rounded-xl bg-white text-black font-bold text-xs tracking-wider uppercase hover:bg-zinc-200 transition-all flex items-center justify-center gap-2"
-              >
-                <CheckCircle2 className="w-4 h-4 text-black" />
-                Simulasikan Pembayaran Sukses
-              </button>
-              <button
-                onClick={() => executeOrderSubmission('UNPAID')}
-                className="w-full py-2.5 px-4 rounded-xl border border-zinc-800 text-zinc-400 hover:text-white text-xs font-medium"
-              >
-                Bayar Nanti di Kasir
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
 }

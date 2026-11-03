@@ -9,20 +9,25 @@ import {
   ExternalLink,
   Radio,
   Layers,
+  KeyRound,
 } from 'lucide-react';
 
 export default function AdminHeader({
   activeTab,
   onSelectTab,
   pendingCount = 0,
+  waiterCallsCount = 0,
+  onOpenWaiterCallsModal,
+  onOpenChangePasswordModal,
   isSoundEnabled,
   onToggleSound,
   onSwitchToCustomer,
   onLogout,
   user,
+  isLive = true,
 }) {
   return (
-    <header className="sticky top-0 z-40 bg-zinc-950/90 backdrop-blur-xl border-b border-zinc-800 px-4 lg:px-8 py-3.5 transition-all">
+    <header className="sticky top-0 z-40 bg-zinc-950/90 backdrop-blur-xl border-b border-zinc-800 px-4 lg:px-8 py-3.5 transition-all no-print">
       <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
         {/* Left: Brand & Socket status */}
         <div className="flex items-center justify-between">
@@ -39,9 +44,19 @@ export default function AdminHeader({
                 <h1 className="font-extrabold text-sm sm:text-base tracking-wider uppercase text-white">
                   LA JAVA KITCHEN & ADMIN
                 </h1>
-                <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-zinc-900 border border-zinc-800 text-[10px] text-zinc-300">
-                  <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>
-                  <span className="font-mono">LIVE REAL-TIME</span>
+                <div
+                  className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[10px] transition-colors ${
+                    isLive
+                      ? 'bg-emerald-950/40 border-emerald-500/30 text-emerald-400'
+                      : 'bg-rose-950/40 border-rose-500/30 text-rose-400'
+                  }`}
+                >
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full ${
+                      isLive ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'
+                    }`}
+                  ></span>
+                  <span className="font-mono">{isLive ? 'LIVE REAL-TIME' : 'TERPUTUS'}</span>
                 </div>
               </div>
               <p className="text-[10px] text-zinc-400">
@@ -111,8 +126,20 @@ export default function AdminHeader({
           </button>
         </div>
 
-        {/* Right: Sound toggle, view client, logout */}
+        {/* Right: Waiter calls notification, sound toggle, view client, logout */}
         <div className="flex items-center gap-2">
+          {/* Active Waiter Calls Trigger */}
+          {waiterCallsCount > 0 && onOpenWaiterCallsModal && (
+            <button
+              onClick={onOpenWaiterCallsModal}
+              title="Buka Antrean Panggilan Pelayan"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white text-black text-xs font-extrabold uppercase tracking-wider hover:bg-zinc-200 transition-all shadow-md animate-pulse"
+            >
+              <Bell className="w-3.5 h-3.5 fill-black" />
+              <span>{waiterCallsCount} Panggilan</span>
+            </button>
+          )}
+
           {/* Sound Alert Toggle */}
           <button
             onClick={onToggleSound}
@@ -138,6 +165,17 @@ export default function AdminHeader({
             <ExternalLink className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Web Pelanggan</span>
           </button>
+
+          {/* Change Password */}
+          {onOpenChangePasswordModal && (
+            <button
+              onClick={onOpenChangePasswordModal}
+              title="Ganti Password Admin"
+              className="p-2 rounded-xl border border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-white hover:border-zinc-700 transition-colors"
+            >
+              <KeyRound className="w-4 h-4" />
+            </button>
+          )}
 
           {/* Logout */}
           <button

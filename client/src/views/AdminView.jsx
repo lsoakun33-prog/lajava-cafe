@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Lock, User, KeyRound, ShieldAlert, CheckCircle2 } from 'lucide-react';
+import { Lock, User, KeyRound, ShieldAlert, CheckCircle2, Bell } from 'lucide-react';
 import AdminHeader from '../components/admin/AdminHeader';
 import OrdersTab from '../components/admin/OrdersTab';
 import MenuTab from '../components/admin/MenuTab';
@@ -7,10 +7,13 @@ import TablesTab from '../components/admin/TablesTab';
 import AnalyticsTab from '../components/admin/AnalyticsTab';
 import MenuItemFormModal from '../components/admin/MenuItemFormModal';
 import TableFormModal from '../components/admin/TableFormModal';
+import WaiterCallsModal from '../components/admin/WaiterCallsModal';
+import ChangePasswordModal from '../components/admin/ChangePasswordModal';
 import ReceiptModal from '../components/ReceiptModal';
 import { api } from '../api';
 import { socket, joinAdminRoom } from '../socket';
 import { playNotificationSound, playWaiterBellSound } from '../utils/sound';
+import { formatTimeAgo } from '../utils/format';
 
 export default function AdminView({ onSwitchToCustomer }) {
   const [user, setUser] = useState(() => api.getStoredUser());
@@ -25,6 +28,7 @@ export default function AdminView({ onSwitchToCustomer }) {
   // Admin Dashboard State
   const [activeTab, setActiveTab] = useState('orders'); // 'orders' | 'menu' | 'tables' | 'analytics'
   const [isSoundEnabled, setIsSoundEnabled] = useState(true);
+  const [isSocketConnected, setIsSocketConnected] = useState(socket.connected);
 
   // Data states
   const [orders, setOrders] = useState([]);
@@ -39,18 +43,64 @@ export default function AdminView({ onSwitchToCustomer }) {
   const [editingMenuItem, setEditingMenuItem] = useState(null);
   const [isTableModalOpen, setIsTableModalOpen] = useState(false);
   const [receiptOrder, setReceiptOrder] = useState(null);
+  const [isWaiterCallsModalOpen, setIsWaiterCallsModalOpen] = useState(false);
+  const [isChangePasswordModalOpen, setIsChangePasswordModalOpen] = useState(false);
 
-  // Check login on load
+  // 1. Listen for global auth:expired event from API interceptor
+  useEffect(() => {
+    const onAuthExpired = (e) => {
+      setToken(null);
+      setUser(null);
+      setLoginError(e.detail || 'Sesi login telah berakhir. Silakan login kembali.');
+    };
+    window.addEventListener('auth:expired', onAuthExpired);
+    return () => window.removeEventListener('auth:expired', onAuthExpired);
+  }, []);
+
+  // 2. Validate token with server on load
   useEffect(() => {
     if (token) {
-      joinAdminRoom(token);
-      loadAllAdminData();
+      api.getMe()
+        .then((res) => {
+          if (res.success && res.data) {
+            setUser(res.data);
+            joinAdminRoom(token);
+            loadAllAdminData();
+          }
+        })
+        .catch((err) => {
+          console.warn('[Admin Auth Check Failed]:', err.message);
+          setToken(null);
+          setUser(null);
+          localStorage.removeItem('noir_admin_token');
+          localStorage.removeItem('noir_admin_user');
+          setLoginError('Sesi Anda telah kedaluwarsa. Silakan masuk kembali.');
+        });
     }
   }, [token]);
 
-  // Real-time socket listeners for Admin
+  // 3. Real-time socket listeners for Admin with Auto Re-join & Auto Re-sync on Reconnect
   useEffect(() => {
     if (!token) return;
+
+    const handleConnect = () => {
+      setIsSocketConnected(true);
+      joinAdminRoom(token);
+      loadAllAdminData(); // Auto re-sync latest orders so no orders are missed!
+    };
+
+    const handleDisconnect = () => {
+      setIsSocketConnected(false);
+    };
+
+    const handleAuthFailed = (data) => {
+      console.warn('[Admin Socket Auth Failed]:', data?.message);
+      setToken(null);
+      setUser(null);
+      localStorage.removeItem('noir_admin_token');
+      localStorage.removeItem('noir_admin_user');
+      setLoginError(data?.message || 'Sesi admin tidak valid. Silakan login kembali.');
+    };
 
     const handleNewOrder = (newOrder) => {
       // Audio chime alert!
@@ -58,7 +108,10 @@ export default function AdminView({ onSwitchToCustomer }) {
         playNotificationSound();
       }
 
-      setOrders((prev) => [newOrder, ...prev]);
+      setOrders((prev) => {
+        if (prev.some((o) => o.id === newOrder.id)) return prev;
+        return [newOrder, ...prev];
+      });
 
       // Refresh stats
       api.getStats().then((res) => setStats(res.data)).catch(() => {});
@@ -81,25 +134,38 @@ export default function AdminView({ onSwitchToCustomer }) {
       if (isSoundEnabled) {
         playWaiterBellSound();
       }
-      setWaiterCalls((prev) => [call, ...prev.filter((c) => c.id !== call.id)]);
+      // FIFO: Append new calls to the end of the queue so oldest call remains priority #1 at index 0
+      setWaiterCalls((prev) => [...prev.filter((c) => c.id !== call.id), call]);
     };
 
     const handleWaiterResolved = ({ id }) => {
       setWaiterCalls((prev) => prev.filter((c) => c.id !== id));
     };
 
+    const handleWaiterResolvedAll = () => {
+      setWaiterCalls([]);
+    };
+
+    socket.on('connect', handleConnect);
+    socket.on('disconnect', handleDisconnect);
+    socket.on('admin:auth_failed', handleAuthFailed);
     socket.on('order:new', handleNewOrder);
     socket.on('order:status_updated', handleStatusUpdated);
     socket.on('order:payment_updated', handlePaymentUpdated);
     socket.on('waiter:called', handleWaiterCalled);
     socket.on('waiter:resolved', handleWaiterResolved);
+    socket.on('waiter:resolved_all', handleWaiterResolvedAll);
 
     return () => {
+      socket.off('connect', handleConnect);
+      socket.off('disconnect', handleDisconnect);
+      socket.off('admin:auth_failed', handleAuthFailed);
       socket.off('order:new', handleNewOrder);
       socket.off('order:status_updated', handleStatusUpdated);
       socket.off('order:payment_updated', handlePaymentUpdated);
       socket.off('waiter:called', handleWaiterCalled);
       socket.off('waiter:resolved', handleWaiterResolved);
+      socket.off('waiter:resolved_all', handleWaiterResolvedAll);
     };
   }, [token, isSoundEnabled]);
 
@@ -131,6 +197,15 @@ export default function AdminView({ onSwitchToCustomer }) {
       setWaiterCalls((prev) => prev.filter((c) => c.id !== callId));
     } catch (err) {
       console.error('Failed to resolve waiter call:', err);
+    }
+  };
+
+  const handleResolveAllWaiterCalls = async () => {
+    try {
+      await api.resolveAllWaiterCalls();
+      setWaiterCalls([]);
+    } catch (err) {
+      console.error('Failed to resolve all waiter calls:', err);
     }
   };
 
@@ -350,34 +425,69 @@ export default function AdminView({ onSwitchToCustomer }) {
         activeTab={activeTab}
         onSelectTab={setActiveTab}
         pendingCount={pendingCount}
+        waiterCallsCount={waiterCalls.length}
+        onOpenWaiterCallsModal={() => setIsWaiterCallsModalOpen(true)}
+        onOpenChangePasswordModal={() => setIsChangePasswordModalOpen(true)}
         isSoundEnabled={isSoundEnabled}
         onToggleSound={() => setIsSoundEnabled(!isSoundEnabled)}
         onSwitchToCustomer={onSwitchToCustomer}
         onLogout={handleLogout}
         user={user}
+        isLive={isSocketConnected}
       />
 
-      {/* Real-Time Waiter Calls Alert Bar */}
+      {/* Real-Time Waiter Calls Alert Bar with Multi-Call & FIFO Priority Support */}
       {waiterCalls.length > 0 && (
-        <div className="bg-zinc-900 border-b border-zinc-800 px-4 lg:px-8 py-2.5 animate-pulse">
-          <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2.5 text-xs">
-              <span className="w-2.5 h-2.5 rounded-full bg-white animate-ping"></span>
-              <span className="font-bold text-white uppercase tracking-wider">
-                Panggilan Meja ({waiterCalls.length}):
+        <div className="bg-zinc-900 border-b border-zinc-800 px-4 lg:px-8 py-3 transition-all no-print">
+          <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-2.5 text-xs">
+              <span className="w-2.5 h-2.5 rounded-full bg-white animate-ping" />
+              <span className="font-extrabold text-white uppercase tracking-wider bg-zinc-800 px-2 py-0.5 rounded-md border border-zinc-700">
+                Panggilan Meja ({waiterCalls.length})
               </span>
-              <span className="text-zinc-300">
-                <span className="font-bold text-white">{waiterCalls[0].table_number}</span> —{' '}
-                {waiterCalls[0].call_type.replace(/_/g, ' ')}
-                {waiterCalls[0].note ? ` ("${waiterCalls[0].note}")` : ''}
+              <span className="text-zinc-300 flex flex-wrap items-center gap-1.5">
+                <span className="text-zinc-400 font-semibold">Prioritas #1:</span>
+                <span className="font-black text-white bg-zinc-800 px-2 py-0.5 rounded border border-zinc-700">
+                  {waiterCalls[0].table_number}
+                </span>
+                <span>— {waiterCalls[0].call_type ? waiterCalls[0].call_type.replace(/_/g, ' ') : 'Bantuan'}</span>
+                {waiterCalls[0].note && (
+                  <span className="text-zinc-400 italic font-mono text-[11px]">
+                    ("{waiterCalls[0].note}")
+                  </span>
+                )}
+                {waiterCalls[0].created_at && (
+                  <span className="text-zinc-400 text-[11px]">
+                    ({formatTimeAgo(waiterCalls[0].created_at)})
+                  </span>
+                )}
               </span>
+
+              {/* Preview next tables in queue if multiple */}
+              {waiterCalls.length > 1 && (
+                <span className="text-zinc-400 text-[11px] hidden lg:inline">
+                  | Antrean berikutnya:{' '}
+                  <span className="text-zinc-300 font-semibold">
+                    {waiterCalls.slice(1, 4).map((c) => c.table_number).join(', ')}
+                    {waiterCalls.length > 4 ? ` (+${waiterCalls.length - 4} lainnya)` : ''}
+                  </span>
+                </span>
+              )}
             </div>
-            <div className="flex items-center gap-2">
+
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => setIsWaiterCallsModalOpen(true)}
+                className="px-3.5 py-1.5 rounded-xl border border-zinc-700 bg-zinc-800 text-white text-xs font-bold hover:bg-zinc-700 transition-colors flex items-center gap-1.5"
+              >
+                <Bell className="w-3.5 h-3.5" />
+                <span>Buka Antrean ({waiterCalls.length})</span>
+              </button>
               <button
                 onClick={() => handleResolveWaiterCall(waiterCalls[0].id)}
-                className="px-3 py-1 rounded-lg bg-white text-black text-xs font-bold uppercase hover:bg-zinc-200 transition-colors"
+                className="px-3.5 py-1.5 rounded-xl bg-white text-black text-xs font-bold uppercase tracking-wider hover:bg-zinc-200 transition-colors shadow-sm"
               >
-                ✓ Tandai Sudah Ditangani
+                ✓ Selesaikan {waiterCalls[0].table_number}
               </button>
             </div>
           </div>
@@ -447,6 +557,22 @@ export default function AdminView({ onSwitchToCustomer }) {
       <ReceiptModal
         order={receiptOrder}
         onClose={() => setReceiptOrder(null)}
+        isAdmin={true}
+      />
+
+      {/* Active Waiter Calls Queue Modal */}
+      <WaiterCallsModal
+        isOpen={isWaiterCallsModalOpen}
+        onClose={() => setIsWaiterCallsModalOpen(false)}
+        calls={waiterCalls}
+        onResolveCall={handleResolveWaiterCall}
+        onResolveAll={handleResolveAllWaiterCalls}
+      />
+
+      {/* Change Password Modal */}
+      <ChangePasswordModal
+        isOpen={isChangePasswordModalOpen}
+        onClose={() => setIsChangePasswordModalOpen(false)}
       />
     </div>
   );

@@ -80,6 +80,36 @@ router.get('/me', authenticateAdmin, (req, res) => {
   });
 });
 
+// PATCH /api/auth/change-password (Admin)
+router.patch('/change-password', authenticateAdmin, (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ success: false, message: 'Password saat ini dan password baru wajib diisi' });
+    }
+    if (newPassword.length < 6) {
+      return res.status(400).json({ success: false, message: 'Password baru minimal harus 6 karakter' });
+    }
+
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User tidak ditemukan' });
+    }
+
+    const isMatch = bcrypt.compareSync(currentPassword, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ success: false, message: 'Password saat ini salah' });
+    }
+
+    const hashedPassword = bcrypt.hashSync(newPassword, 10);
+    db.prepare('UPDATE users SET password = ? WHERE id = ?').run(hashedPassword, user.id);
+
+    return res.json({ success: true, message: 'Password admin berhasil diperbarui!' });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 module.exports = {
   router,
   authenticateAdmin,

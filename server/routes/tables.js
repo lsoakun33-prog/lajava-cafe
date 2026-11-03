@@ -23,7 +23,16 @@ async function generateTableQRCode(tableNumber, qrToken, clientBaseUrl) {
 // GET /api/tables - Public or Admin list of tables
 router.get('/', async (req, res) => {
   try {
-    const clientBaseUrl = process.env.CLIENT_URL || `http://${req.hostname}:5173`;
+    // Automatically adapt to the live domain / host if deployed
+    const host = req.get('host');
+    const proto = (req.headers['x-forwarded-proto'] || req.protocol || 'http').split(',')[0].trim();
+    const currentOrigin = `${proto}://${host}`;
+    const clientBaseUrl =
+      process.env.CLIENT_URL && !process.env.CLIENT_URL.includes('localhost')
+        ? process.env.CLIENT_URL
+        : host && !host.includes('localhost')
+        ? currentOrigin
+        : process.env.CLIENT_URL || currentOrigin;
     const tables = db.prepare(`
       SELECT t.*, 
         (SELECT COUNT(*) FROM orders o WHERE o.table_number = t.table_number AND o.status NOT IN ('COMPLETED', 'CANCELLED')) as active_orders
@@ -91,10 +100,11 @@ router.post('/calls', (req, res) => {
     }
 
     const id = `call_${crypto.randomUUID().slice(0, 8)}`;
+    const nowIso = new Date().toISOString();
     db.prepare(`
-      INSERT INTO waiter_calls (id, table_number, call_type, note, status)
-      VALUES (?, ?, ?, ?, 'PENDING')
-    `).run(id, tableNumber, callType, note);
+      INSERT INTO waiter_calls (id, table_number, call_type, note, status, created_at)
+      VALUES (?, ?, ?, ?, 'PENDING', ?)
+    `).run(id, tableNumber, callType, note, nowIso);
 
     const callData = {
       id,
@@ -102,7 +112,7 @@ router.post('/calls', (req, res) => {
       call_type: callType,
       note,
       status: 'PENDING',
-      created_at: new Date().toISOString(),
+      created_at: nowIso,
     };
 
     try {
@@ -116,15 +126,45 @@ router.post('/calls', (req, res) => {
   }
 });
 
-// GET /api/tables/calls - Admin retrieves active waiter calls
+// GET /api/tables/calls - Admin retrieves active waiter calls in FIFO order (oldest first)
 router.get('/calls', authenticateAdmin, (req, res) => {
   try {
     const calls = db.prepare(`
       SELECT * FROM waiter_calls 
       WHERE status = 'PENDING' 
-      ORDER BY created_at DESC
+      ORDER BY created_at ASC
     `).all();
-    return res.json({ success: true, data: calls });
+
+    const normalized = calls.map((c) => ({
+      ...c,
+      created_at: c.created_at
+        ? c.created_at.includes('Z') || c.created_at.includes('T')
+          ? c.created_at
+          : c.created_at + ' UTC'
+        : c.created_at,
+    }));
+
+    return res.json({ success: true, data: normalized });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// PATCH /api/tables/calls/resolve-all - Admin marks all pending waiter calls as resolved
+router.patch('/calls/resolve-all', authenticateAdmin, (req, res) => {
+  try {
+    db.prepare(`
+      UPDATE waiter_calls 
+      SET status = 'RESOLVED', resolved_at = CURRENT_TIMESTAMP 
+      WHERE status = 'PENDING'
+    `).run();
+
+    try {
+      const { getIO } = require('../socket');
+      getIO().to('admin:room').emit('waiter:resolved_all');
+    } catch (_) {}
+
+    return res.json({ success: true, message: 'Semua panggilan pelayan telah ditandai selesai' });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
   }

@@ -428,8 +428,8 @@ router.get('/export/csv', authenticateAdmin, (req, res) => {
   }
 });
 
-// PATCH /api/orders/:id/payment - Payment status updater
-router.patch('/:id/payment', (req, res) => {
+// PATCH /api/orders/:id/payment - Payment status updater (Strictly Admin / Cashier only)
+router.patch('/:id/payment', authenticateAdmin, (req, res) => {
   try {
     const { id } = req.params;
     const { paymentStatus } = req.body;

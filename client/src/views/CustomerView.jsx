@@ -446,13 +446,7 @@ export default function CustomerView({ onSwitchToAdmin }) {
 
       const res = await api.createOrder(payloadWithToken);
       if (res.success && res.data) {
-        let finalOrder = res.data;
-
-        // If paid via QRIS, update status in backend
-        if (paymentStatus === 'PAID') {
-          const payRes = await api.updateOrderPayment(finalOrder.id, 'PAID').catch(() => null);
-          if (payRes?.data) finalOrder = payRes.data;
-        }
+        const finalOrder = res.data;
 
         setActiveOrder(finalOrder);
         localStorage.setItem('noir_active_order', JSON.stringify(finalOrder));
@@ -670,6 +664,7 @@ export default function CustomerView({ onSwitchToAdmin }) {
       <ReceiptModal
         order={receiptOrder}
         onClose={() => setReceiptOrder(null)}
+        isAdmin={false}
       />
 
       {/* Call Waiter Dialog */}

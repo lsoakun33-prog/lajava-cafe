@@ -37,14 +37,109 @@
 
 /* Print styles for QR codes & receipts */
 @media print {
-  body {
-    background: white !important;
-    color: black !important;
+  @page {
+    size: auto;
+    margin: 5mm;
   }
-  .no-print {
+
+  html, body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    height: auto !important;
+  }
+
+  /* Utility classes */
+  .no-print,
+  .print-hidden {
     display: none !important;
   }
+
   .print-only {
     display: block !important;
+  }
+
+  /* When printing receipts or modals, isolate completely from application root */
+  body.modal-receipt-open #root,
+  body.modal-zreport-open #root {
+    display: none !important;
+  }
+
+  body.modal-receipt-open #print-portal,
+  body.modal-zreport-open #print-portal {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  /* Unset modal backdrop, shadows, and flex centering during print */
+  .receipt-modal-backdrop {
+    position: static !important;
+    inset: auto !important;
+    background: transparent !important;
+    backdrop-filter: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    display: block !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  .receipt-modal-box {
+    position: static !important;
+    background: #ffffff !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    max-width: 100% !important;
+    max-height: none !important;
+    width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+    display: block !important;
+  }
+
+  /* Ensure all receipt elements render in solid black on pure white */
+  .receipt-printable,
+  .receipt-printable * {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    border-color: #000000 !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+
+  /* Slide pagination controls */
+  .receipt-page {
+    background: #ffffff !important;
+    color: #000000 !important;
+    width: 100% !important;
+    max-width: 78mm !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+    padding: 4mm 2mm !important;
+    box-sizing: border-box !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  /* Force page break after this slide */
+  .receipt-page-break {
+    page-break-after: always !important;
+    break-after: page !important;
+  }
+
+  /* Prevent trailing page break */
+  .receipt-page-no-break {
+    page-break-after: avoid !important;
+    break-after: avoid !important;
   }
 }

@@ -23,6 +23,7 @@ const io = initSocket(server);
 app.use(cors({ origin: '*' }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use('/images', express.static(path.join(__dirname, '..', 'client', 'public', 'images')));
 
 // API Routes
 app.use('/api/auth', authRouter);

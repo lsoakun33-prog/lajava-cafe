@@ -52,19 +52,20 @@ function initSocket(serverInstance) {
         if (!data || !data.tableNumber) return;
 
         const id = `call_${crypto.randomUUID().slice(0, 8)}`;
+        const nowIso = new Date().toISOString();
         const callData = {
           id,
           table_number: data.tableNumber,
           call_type: data.callType || 'BANTUAN',
           note: data.note || '',
           status: 'PENDING',
-          created_at: new Date().toISOString(),
+          created_at: nowIso,
         };
 
         db.prepare(`
-          INSERT INTO waiter_calls (id, table_number, call_type, note, status)
-          VALUES (?, ?, ?, ?, 'PENDING')
-        `).run(id, callData.table_number, callData.call_type, callData.note);
+          INSERT INTO waiter_calls (id, table_number, call_type, note, status, created_at)
+          VALUES (?, ?, ?, ?, 'PENDING', ?)
+        `).run(id, callData.table_number, callData.call_type, callData.note, nowIso);
 
         io.to('admin:room').emit('waiter:called', callData);
         socket.emit('call:waiter_success', callData);

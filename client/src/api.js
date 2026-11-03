@@ -1,4 +1,4 @@
-const API_BASE = '/api';
+const API_BASE = (import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace(/\/+$/, '') : '') + '/api';
 
 function getAuthHeader() {
   const token = localStorage.getItem('noir_admin_token');
@@ -20,6 +20,14 @@ async function request(endpoint, options = {}) {
   const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {
+    if ((response.status === 401 || response.status === 403) && !endpoint.includes('/auth/login')) {
+      // Clear expired admin credentials and broadcast session expiry
+      if (localStorage.getItem('noir_admin_token')) {
+        localStorage.removeItem('noir_admin_token');
+        localStorage.removeItem('noir_admin_user');
+        window.dispatchEvent(new CustomEvent('auth:expired', { detail: data.message || 'Sesi telah berakhir' }));
+      }
+    }
     throw new Error(data.message || `Request failed with status ${response.status}`);
   }
 
@@ -42,6 +50,13 @@ export const api = {
 
   async getMe() {
     return request('/auth/me');
+  },
+
+  async changePassword(currentPassword, newPassword) {
+    return request('/auth/change-password', {
+      method: 'PATCH',
+      body: JSON.stringify({ currentPassword, newPassword }),
+    });
   },
 
   logout() {
@@ -137,6 +152,12 @@ export const api = {
 
   async resolveWaiterCall(id) {
     return request(`/tables/calls/${id}/resolve`, {
+      method: 'PATCH',
+    });
+  },
+
+  async resolveAllWaiterCalls() {
+    return request('/tables/calls/resolve-all', {
       method: 'PATCH',
     });
   },

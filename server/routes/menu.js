@@ -88,7 +88,7 @@ router.post('/items', authenticateAdmin, (req, res) => {
     }
 
     const id = `item_${crypto.randomUUID().slice(0, 8)}`;
-    const finalImage = image || 'https://images.unsplash.com/photo-1510707577719-ae7c14805e3a?w=600&auto=format&fit=crop&q=80';
+    const finalImage = image || '';
     const parsedStock = stock !== undefined && stock !== null && stock !== '' ? Math.max(0, parseInt(stock, 10)) : null;
     const initialAvailable = parsedStock === 0 ? 0 : 1;
 
